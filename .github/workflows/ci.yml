@@ -44,3 +44,11 @@ jobs:
       - name: Rust tests
         run: cargo test
         working-directory: src-tauri
+
+      - name: Rust fmt check
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: Rust clippy
+        run: cargo clippy -- -D warnings
+        working-directory: src-tauri
