@@ -58,6 +58,8 @@ let currentState: AppStateResponse | null = null;
 let messageTimerSettings: number | null = null;
 let messageTimerDiagnostics: number | null = null;
 let previousTransitionCount = 0;
+let isSettingsFormDirty = false;
+let isProgrammaticFormUpdate = false;
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) {
@@ -145,45 +147,75 @@ app.innerHTML = `
 function setStatusCards(snapshot: RuntimeSnapshot, health: string): void {
   const host = document.querySelector<HTMLDivElement>("#status-cards");
   if (!host) return;
-  host.innerHTML = `
-    <article class="card"><h3>Current State</h3><strong>${snapshot.last_known_state ?? "unknown"}</strong></article>
-    <article class="card"><h3>Health</h3><strong>${health}</strong></article>
-    <article class="card"><h3>Last Success</h3><strong>${formatTimestamp(snapshot.last_success_at)}</strong></article>
-    <article class="card"><h3>Consecutive Failures</h3><strong>${snapshot.consecutive_failures}</strong></article>
-  `;
+  host.replaceChildren();
+
+  const addCard = (label: string, value: string): void => {
+    const article = document.createElement("article");
+    article.className = "card";
+    const h3 = document.createElement("h3");
+    h3.textContent = label;
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    article.append(h3, strong);
+    host.append(article);
+  };
+
+  addCard("Current State", snapshot.last_known_state ?? "unknown");
+  addCard("Health", health);
+  addCard("Last Success", formatTimestamp(snapshot.last_success_at));
+  addCard("Consecutive Failures", String(snapshot.consecutive_failures));
 }
 
 function renderTransitions(transitions: TransitionEntry[]): void {
   const list = document.querySelector<HTMLUListElement>("#transition-list");
   if (!list) return;
+  list.replaceChildren();
   if (transitions.length === 0) {
-    list.innerHTML = "<li class='muted'>No transitions yet.</li>";
+    const empty = document.createElement("li");
+    empty.className = "muted";
+    empty.textContent = "No transitions yet.";
+    list.append(empty);
     return;
   }
 
-  list.innerHTML = transitions
-    .slice()
-    .reverse()
-    .map((t) => `<li><strong>${t.from} -> ${t.to}</strong><br/><span>${formatTimestamp(t.detected_at)}</span></li>`)
-    .join("");
+  for (const transition of transitions.slice().reverse()) {
+    const item = document.createElement("li");
+    const strong = document.createElement("strong");
+    strong.textContent = `${transition.from} -> ${transition.to}`;
+    const br = document.createElement("br");
+    const span = document.createElement("span");
+    span.textContent = formatTimestamp(transition.detected_at);
+    item.append(strong, br, span);
+    list.append(item);
+  }
 }
 
 function renderLogs(logs: LogEntry[]): void {
   const list = document.querySelector<HTMLUListElement>("#log-list");
   if (!list) return;
+  list.replaceChildren();
   if (logs.length === 0) {
-    list.innerHTML = "<li class='muted'>No logs yet.</li>";
+    const empty = document.createElement("li");
+    empty.className = "muted";
+    empty.textContent = "No logs yet.";
+    list.append(empty);
     return;
   }
 
-  list.innerHTML = logs
-    .slice()
-    .reverse()
-    .map((l) => `<li><strong>[${l.level.toUpperCase()}]</strong> ${l.message}<br/><span>${formatTimestamp(l.timestamp_ms)}</span></li>`)
-    .join("");
+  for (const log of logs.slice().reverse()) {
+    const item = document.createElement("li");
+    const strong = document.createElement("strong");
+    strong.textContent = `[${log.level.toUpperCase()}]`;
+    item.append(strong, document.createTextNode(` ${log.message}`), document.createElement("br"));
+    const span = document.createElement("span");
+    span.textContent = formatTimestamp(log.timestamp_ms);
+    item.append(span);
+    list.append(item);
+  }
 }
 
 function setFormValues(settings: AppSettings): void {
+  isProgrammaticFormUpdate = true;
   (document.querySelector("#poll_interval_sec") as HTMLInputElement).value = String(settings.poll_interval_sec);
   (document.querySelector("#low_power_poll_interval_sec") as HTMLInputElement).value = String(settings.low_power_poll_interval_sec);
   (document.querySelector("#http_timeout_ms") as HTMLInputElement).value = String(settings.http_timeout_ms);
@@ -195,6 +227,7 @@ function setFormValues(settings: AppSettings): void {
   (document.querySelector("#status_endpoint_url") as HTMLInputElement).value = settings.status_endpoint_url;
   (document.querySelector("#error_telemetry_enabled") as HTMLInputElement).checked = settings.error_telemetry_enabled;
   (document.querySelector("#usage_telemetry_enabled") as HTMLInputElement).checked = settings.usage_telemetry_enabled;
+  isProgrammaticFormUpdate = false;
 }
 
 function readSettingsFromForm(): AppSettings {
@@ -218,7 +251,7 @@ function readSettingsFromForm(): AppSettings {
   };
 }
 
-function renderAll(state: AppStateResponse): void {
+function renderAll(state: AppStateResponse, options: { forceFormSync?: boolean } = {}): void {
   initFrontendTelemetry({
     dsn: state.frontend_telemetry_dsn ?? undefined,
     installationId: state.installation_id,
@@ -226,7 +259,9 @@ function renderAll(state: AppStateResponse): void {
   });
   currentState = state;
   setStatusCards(state.snapshot, state.health);
-  setFormValues(state.settings);
+  if (options.forceFormSync || !isSettingsFormDirty) {
+    setFormValues(state.settings);
+  }
   renderTransitions(state.transitions);
   renderLogs(state.logs);
 
@@ -273,9 +308,9 @@ function flashMessage(
   }, 3200);
 }
 
-async function loadState(): Promise<void> {
+async function loadState(forceFormSync = false): Promise<void> {
   const state = await invoke<AppStateResponse>("get_app_state");
-  renderAll(state);
+  renderAll(state, { forceFormSync });
 }
 
 async function saveSettings(event: SubmitEvent): Promise<void> {
@@ -285,8 +320,9 @@ async function saveSettings(event: SubmitEvent): Promise<void> {
     if (currentState) {
       currentState.settings = saved;
     }
+    isSettingsFormDirty = false;
     flashMessage("Settings saved.", "success");
-    await loadState();
+    await loadState(true);
   } catch (error) {
     captureUiError(error, {
       action: "save_settings_failed",
@@ -300,6 +336,16 @@ async function saveSettings(event: SubmitEvent): Promise<void> {
 async function wireActions(): Promise<void> {
   document.querySelector("#settings-form")?.addEventListener("submit", (e) => {
     void saveSettings(e as SubmitEvent);
+  });
+  document.querySelector("#settings-form")?.addEventListener("input", () => {
+    if (!isProgrammaticFormUpdate) {
+      isSettingsFormDirty = true;
+    }
+  });
+  document.querySelector("#settings-form")?.addEventListener("change", () => {
+    if (!isProgrammaticFormUpdate) {
+      isSettingsFormDirty = true;
+    }
   });
 
   document.querySelector("#refresh-now")?.addEventListener("click", async () => {
@@ -378,6 +424,7 @@ async function wireActions(): Promise<void> {
     const endpointInput = document.querySelector<HTMLInputElement>("#status_endpoint_url");
     if (!endpointInput) return;
     endpointInput.value = DEFAULT_ENDPOINT_URL;
+    isSettingsFormDirty = true;
     flashMessage("Endpoint reset. Click Save Settings to persist.", "info");
   });
 
@@ -404,5 +451,5 @@ async function wireActions(): Promise<void> {
 
 void (async () => {
   await wireActions();
-  await loadState();
+  await loadState(true);
 })();
