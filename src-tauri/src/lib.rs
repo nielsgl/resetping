@@ -18,9 +18,12 @@ use tauri::{
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_updater::UpdaterExt as _;
 use tokio::time::sleep;
 
 const DEFAULT_ENDPOINT: &str = "https://hascodexratelimitreset.today/api/status";
+const DEFAULT_UPDATER_ENDPOINT: &str =
+    "https://github.com/niels-vg/codex-reset-notifier/releases/latest/download/latest.json";
 const APP_USER_AGENT: &str = "ResetPing/0.1.0 (+https://github.com/niels-vg/codex-reset-notifier)";
 const STATE_FILE: &str = "state.json";
 const TRANSITIONS_LIMIT: usize = 100;
@@ -125,12 +128,33 @@ struct AppStateResponse {
     health: String,
     installation_id: String,
     frontend_telemetry_dsn: Option<String>,
+    updater: Option<UpdateCheckResponse>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct UpdateCheckResponse {
     checked_at: u64,
-    result: String,
+    status: UpdateCheckStatus,
+    version: Option<String>,
+    current_version: Option<String>,
+    notes: Option<String>,
+    install_ready: bool,
+    message: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum UpdateCheckStatus {
+    UpToDate,
+    UpdateAvailable,
+    UnsupportedPlatform,
+    CheckFailed,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum UpdateCheckTrigger {
+    Manual,
+    Scheduled,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -174,6 +198,9 @@ struct RuntimeState {
     logs: VecDeque<LogEntry>,
     in_flight: bool,
     last_update_check_ms: Option<u64>,
+    pending_update: Option<tauri_plugin_updater::Update>,
+    updater: Option<UpdateCheckResponse>,
+    background_notified_update_version: Option<String>,
     installation_id: String,
     last_usage_heartbeat_at_ms: Option<u64>,
     sentry_dsn: Option<String>,
@@ -251,6 +278,41 @@ fn heartbeat_due(last_usage_heartbeat_at_ms: Option<u64>, now: u64) -> bool {
 
 fn should_emit_poll_failure_telemetry(consecutive_failures: u32) -> bool {
     matches!(consecutive_failures, 1 | 5 | 20 | 100)
+}
+
+fn updater_public_key() -> Option<&'static str> {
+    option_env!("TAURI_UPDATER_PUBLIC_KEY").filter(|value| !value.trim().is_empty())
+}
+
+fn updater_supported_platform() -> bool {
+    cfg!(target_os = "macos")
+}
+
+fn update_check_due(last_check: Option<u64>, now: u64, interval_hours: u64) -> bool {
+    let due_ms = interval_hours.saturating_mul(60 * 60 * 1000);
+    last_check
+        .map(|last| now.saturating_sub(last) >= due_ms)
+        .unwrap_or(true)
+}
+
+fn update_response(
+    checked_at: u64,
+    status: UpdateCheckStatus,
+    version: Option<String>,
+    current_version: Option<String>,
+    notes: Option<String>,
+    install_ready: bool,
+    message: impl Into<String>,
+) -> UpdateCheckResponse {
+    UpdateCheckResponse {
+        checked_at,
+        status,
+        version,
+        current_version,
+        notes,
+        install_ready,
+        message: message.into(),
+    }
 }
 
 fn sanitize_settings(mut settings: AppSettings) -> AppSettings {
@@ -343,6 +405,7 @@ fn emit_state_changed(app: &AppHandle, runtime: &RuntimeState) {
             health: health_label(&runtime.snapshot),
             installation_id: runtime.installation_id.clone(),
             frontend_telemetry_dsn: runtime.sentry_dsn.clone(),
+            updater: runtime.updater.clone(),
         },
     );
 }
@@ -667,6 +730,195 @@ async fn fetch_status_via_curl(settings: &AppSettings) -> Result<NormalizedStatu
     })
 }
 
+async fn perform_update_check(
+    app: &AppHandle,
+    state: &SharedState,
+    trigger: UpdateCheckTrigger,
+) -> UpdateCheckResponse {
+    let checked_at = now_ms();
+    let (settings, installation_id) = {
+        let mut guard = state.inner.lock().unwrap();
+        guard.last_update_check_ms = Some(checked_at);
+        capture_usage_event(
+            &guard.settings,
+            &guard.installation_id,
+            "update_check",
+            "updater",
+            match trigger {
+                UpdateCheckTrigger::Manual => "Manual update check requested",
+                UpdateCheckTrigger::Scheduled => "Background update check requested",
+            },
+        );
+        push_log(
+            &mut guard,
+            "info",
+            match trigger {
+                UpdateCheckTrigger::Manual => "Manual update check requested",
+                UpdateCheckTrigger::Scheduled => "Background update check requested",
+            },
+        );
+        (guard.settings.clone(), guard.installation_id.clone())
+    };
+
+    let response = if !updater_supported_platform() {
+        update_response(
+            checked_at,
+            UpdateCheckStatus::UnsupportedPlatform,
+            None,
+            Some(env!("CARGO_PKG_VERSION").to_string()),
+            None,
+            false,
+            "In-app updater is enabled on macOS only for v1.",
+        )
+    } else {
+        match updater_public_key() {
+            None => update_response(
+                checked_at,
+                UpdateCheckStatus::CheckFailed,
+                None,
+                Some(env!("CARGO_PKG_VERSION").to_string()),
+                None,
+                false,
+                "Updater public key is not configured.",
+            ),
+            Some(pubkey) => {
+                let endpoint = match DEFAULT_UPDATER_ENDPOINT.parse::<tauri::Url>() {
+                    Ok(endpoint) => endpoint,
+                    Err(err) => {
+                        return update_response(
+                            checked_at,
+                            UpdateCheckStatus::CheckFailed,
+                            None,
+                            Some(env!("CARGO_PKG_VERSION").to_string()),
+                            None,
+                            false,
+                            format!("Updater endpoint URL is invalid: {err}"),
+                        )
+                    }
+                };
+                let builder = app.updater_builder().endpoints(vec![endpoint]);
+                let updater = match builder {
+                    Ok(builder) => builder.pubkey(pubkey).build(),
+                    Err(err) => Err(err),
+                };
+
+                match updater {
+                    Ok(updater) => match updater.check().await {
+                        Ok(Some(update)) => {
+                            let version = update.version.clone();
+                            let current_version = update.current_version.clone();
+                            let notes = update.body.clone();
+                            {
+                                let mut guard = state.inner.lock().unwrap();
+                                guard.pending_update = Some(update);
+                            }
+                            update_response(
+                                checked_at,
+                                UpdateCheckStatus::UpdateAvailable,
+                                Some(version),
+                                Some(current_version),
+                                notes,
+                                true,
+                                "Update is available. Use Install Update to apply it.",
+                            )
+                        }
+                        Ok(None) => update_response(
+                            checked_at,
+                            UpdateCheckStatus::UpToDate,
+                            None,
+                            Some(env!("CARGO_PKG_VERSION").to_string()),
+                            None,
+                            false,
+                            "ResetPing is up to date.",
+                        ),
+                        Err(err) => {
+                            if settings.error_telemetry_enabled {
+                                capture_telemetry_error(
+                                    &settings,
+                                    &installation_id,
+                                    &format!("Updater check failed: {err}"),
+                                    "updater",
+                                    "check_failed",
+                                );
+                            }
+                            update_response(
+                                checked_at,
+                                UpdateCheckStatus::CheckFailed,
+                                None,
+                                Some(env!("CARGO_PKG_VERSION").to_string()),
+                                None,
+                                false,
+                                format!("Update check failed: {err}"),
+                            )
+                        }
+                    },
+                    Err(err) => {
+                        if settings.error_telemetry_enabled {
+                            capture_telemetry_error(
+                                &settings,
+                                &installation_id,
+                                &format!("Updater initialization failed: {err}"),
+                                "updater",
+                                "setup_failed",
+                            );
+                        }
+                        update_response(
+                            checked_at,
+                            UpdateCheckStatus::CheckFailed,
+                            None,
+                            Some(env!("CARGO_PKG_VERSION").to_string()),
+                            None,
+                            false,
+                            format!("Updater initialization failed: {err}"),
+                        )
+                    }
+                }
+            }
+        }
+    };
+
+    {
+        let mut guard = state.inner.lock().unwrap();
+        let available_version = response.version.clone();
+        let should_notify_background = matches!(trigger, UpdateCheckTrigger::Scheduled)
+            && response.status == UpdateCheckStatus::UpdateAvailable
+            && available_version.as_ref() != guard.background_notified_update_version.as_ref();
+
+        if response.status != UpdateCheckStatus::UpdateAvailable {
+            guard.pending_update = None;
+        }
+
+        if response.status != UpdateCheckStatus::UpdateAvailable {
+            guard.background_notified_update_version = None;
+        }
+
+        if should_notify_background {
+            if let Some(version) = available_version.clone() {
+                send_notification(
+                    app,
+                    "ResetPing: update available",
+                    &format!("Version {version} is available. Open Settings to install."),
+                );
+                guard.background_notified_update_version = Some(version);
+            }
+        }
+
+        push_log(
+            &mut guard,
+            if response.status == UpdateCheckStatus::CheckFailed {
+                "error"
+            } else {
+                "info"
+            },
+            response.message.clone(),
+        );
+        guard.updater = Some(response.clone());
+        emit_state_changed(app, &guard);
+    }
+
+    response
+}
+
 async fn maybe_check_updates(app: &AppHandle, state: &SharedState) {
     let (enabled, interval_hours, last_check) = {
         let guard = state.inner.lock().unwrap();
@@ -682,31 +934,85 @@ async fn maybe_check_updates(app: &AppHandle, state: &SharedState) {
     }
 
     let now = now_ms();
-    let due_ms = interval_hours.saturating_mul(60 * 60 * 1000);
-    if last_check
-        .map(|last| now.saturating_sub(last) < due_ms)
-        .unwrap_or(false)
-    {
+    if !update_check_due(last_check, now, interval_hours) {
         return;
+    }
+
+    let _ = perform_update_check(app, state, UpdateCheckTrigger::Scheduled).await;
+}
+
+async fn apply_pending_update(app: &AppHandle, state: &SharedState) -> Result<String, String> {
+    if !updater_supported_platform() {
+        return Err("In-app updater is enabled on macOS only for v1.".to_string());
+    }
+
+    let (update, settings, installation_id) = {
+        let mut guard = state.inner.lock().unwrap();
+        let Some(update) = guard.pending_update.take() else {
+            return Err(
+                "No pending update is ready to install. Run Check Updates first.".to_string(),
+            );
+        };
+        push_log(
+            &mut guard,
+            "info",
+            format!("Installing update {}...", update.version),
+        );
+        emit_state_changed(app, &guard);
+        (
+            update,
+            guard.settings.clone(),
+            guard.installation_id.clone(),
+        )
+    };
+
+    if let Err(err) = update.download_and_install(|_, _| {}, || {}).await {
+        let mut guard = state.inner.lock().unwrap();
+        let message = format!("Update install failed: {err}");
+        guard.updater = Some(update_response(
+            now_ms(),
+            UpdateCheckStatus::CheckFailed,
+            None,
+            Some(env!("CARGO_PKG_VERSION").to_string()),
+            None,
+            false,
+            message.clone(),
+        ));
+        push_log(&mut guard, "error", message.clone());
+        emit_state_changed(app, &guard);
+        if settings.error_telemetry_enabled {
+            capture_telemetry_error(
+                &settings,
+                &installation_id,
+                &message,
+                "updater",
+                "install_failed",
+            );
+        }
+        return Err(message);
     }
 
     {
         let mut guard = state.inner.lock().unwrap();
-        guard.last_update_check_ms = Some(now);
-        capture_usage_event(
-            &guard.settings,
-            &guard.installation_id,
-            "update_check",
-            "updater",
-            "Background update check requested",
-        );
+        guard.updater = Some(update_response(
+            now_ms(),
+            UpdateCheckStatus::UpToDate,
+            None,
+            Some(env!("CARGO_PKG_VERSION").to_string()),
+            None,
+            false,
+            "Update installed successfully. Restarting...",
+        ));
+        guard.background_notified_update_version = None;
         push_log(
             &mut guard,
             "info",
-            "Background update check requested (manual install flow in v1)",
+            "Update installed successfully. Restarting...",
         );
         emit_state_changed(app, &guard);
     }
+
+    app.restart()
 }
 
 fn maybe_emit_usage_heartbeat(app: &AppHandle, guard: &mut RuntimeState) {
@@ -1035,6 +1341,7 @@ fn get_app_state(state: State<'_, SharedState>) -> Result<AppStateResponse, Stri
         health: health_label(&guard.snapshot),
         installation_id: guard.installation_id.clone(),
         frontend_telemetry_dsn: guard.sentry_dsn.clone(),
+        updater: guard.updater.clone(),
     })
 }
 
@@ -1141,27 +1448,29 @@ fn get_recent_logs(state: State<'_, SharedState>) -> Vec<LogEntry> {
 }
 
 #[tauri::command]
-fn check_for_updates(state: State<'_, SharedState>) -> UpdateCheckResponse {
-    let mut guard = state.inner.lock().unwrap();
-    let now = now_ms();
-    guard.last_update_check_ms = Some(now);
-    capture_usage_event(
-        &guard.settings,
-        &guard.installation_id,
-        "update_check",
-        "updater",
-        "Manual update check requested",
-    );
-    push_log(
-        &mut guard,
-        "info",
-        "Manual update check requested (GitHub release check to be expanded)",
-    );
+async fn check_for_updates(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<UpdateCheckResponse, String> {
+    Ok(perform_update_check(
+        &app,
+        &SharedState {
+            inner: state.inner.clone(),
+        },
+        UpdateCheckTrigger::Manual,
+    )
+    .await)
+}
 
-    UpdateCheckResponse {
-        checked_at: now,
-        result: "No update detected in v1 stub check".to_string(),
-    }
+#[tauri::command]
+async fn install_update(app: AppHandle, state: State<'_, SharedState>) -> Result<String, String> {
+    apply_pending_update(
+        &app,
+        &SharedState {
+            inner: state.inner.clone(),
+        },
+    )
+    .await
 }
 
 #[tauri::command]
@@ -1201,6 +1510,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -1223,6 +1533,9 @@ pub fn run() {
                 logs: VecDeque::new(),
                 in_flight: false,
                 last_update_check_ms: None,
+                pending_update: None,
+                updater: None,
+                background_notified_update_version: None,
                 installation_id,
                 last_usage_heartbeat_at_ms: persistent.last_usage_heartbeat_at_ms,
                 sentry_dsn,
@@ -1316,6 +1629,7 @@ pub fn run() {
             send_test_notification_cmd,
             get_recent_logs,
             check_for_updates,
+            install_update,
             send_test_telemetry_event,
         ])
         .run(tauri::generate_context!())
@@ -1412,5 +1726,31 @@ mod tests {
         assert!(should_emit_poll_failure_telemetry(20));
         assert!(should_emit_poll_failure_telemetry(100));
         assert!(!should_emit_poll_failure_telemetry(101));
+    }
+
+    #[test]
+    fn update_check_due_respects_interval() {
+        let now = 20_000_000;
+        assert!(update_check_due(None, now, 24));
+        assert!(!update_check_due(Some(now - (2 * 60 * 60 * 1000)), now, 3));
+        assert!(update_check_due(Some(now - (4 * 60 * 60 * 1000)), now, 3));
+    }
+
+    #[test]
+    fn unsupported_platform_response_shape_is_stable() {
+        let response = update_response(
+            123,
+            UpdateCheckStatus::UnsupportedPlatform,
+            None,
+            Some("0.1.0".to_string()),
+            None,
+            false,
+            "In-app updater is enabled on macOS only for v1.",
+        );
+
+        assert_eq!(response.checked_at, 123);
+        assert_eq!(response.status, UpdateCheckStatus::UnsupportedPlatform);
+        assert!(!response.install_ready);
+        assert_eq!(response.current_version.as_deref(), Some("0.1.0"));
     }
 }

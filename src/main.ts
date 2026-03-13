@@ -4,6 +4,7 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "./styles.css";
 import { captureUiError, initFrontendTelemetry } from "./utils/telemetry";
 import { buildLogExport, formatTimestamp } from "./utils/time";
+import { shouldShowInstallButton, type UpdateCheckResponse } from "./utils/updater";
 
 const DEFAULT_ENDPOINT_URL = "https://hascodexratelimitreset.today/api/status";
 const IS_DEV_BUILD = import.meta.env.DEV;
@@ -52,6 +53,7 @@ type AppStateResponse = {
   health: string;
   installation_id: string;
   frontend_telemetry_dsn: string | null;
+  updater: UpdateCheckResponse | null;
 };
 
 let currentState: AppStateResponse | null = null;
@@ -121,12 +123,14 @@ app.innerHTML = `
         <div class="form-actions">
           <button type="submit">Save Settings</button>
           <button id="check-updates" type="button">Check Updates</button>
+          <button id="install-update" type="button" hidden>Install Update</button>
           ${IS_DEV_BUILD ? '<button id="test-telemetry" type="button">Send Telemetry Test</button>' : ""}
           ${IS_DEV_BUILD ? '<button id="test-ui-error" type="button">Send UI Error Test</button>' : ""}
           <button id="reset-endpoint" type="button">Reset Endpoint URL</button>
         </div>
       </form>
       <p id="save-message" class="status-message"></p>
+      <p id="update-status" class="status-message status-inline"></p>
     </section>
 
     <section class="panel split">
@@ -264,6 +268,7 @@ function renderAll(state: AppStateResponse, options: { forceFormSync?: boolean }
   }
   renderTransitions(state.transitions);
   renderLogs(state.logs);
+  renderUpdateState(state.updater);
 
   if (state.transitions.length > previousTransitionCount && previousTransitionCount > 0) {
     const newest = state.transitions[state.transitions.length - 1];
@@ -274,6 +279,30 @@ function renderAll(state: AppStateResponse, options: { forceFormSync?: boolean }
     );
   }
   previousTransitionCount = state.transitions.length;
+}
+
+function renderUpdateState(update: UpdateCheckResponse | null): void {
+  const status = document.querySelector<HTMLParagraphElement>("#update-status");
+  const installButton = document.querySelector<HTMLButtonElement>("#install-update");
+  if (!status || !installButton) return;
+
+  const visible = shouldShowInstallButton(update);
+  installButton.hidden = !visible;
+
+  if (!update) {
+    status.className = "status-message status-inline";
+    status.textContent = "";
+    return;
+  }
+
+  const statusClass =
+    update.status === "check_failed"
+      ? "status-error"
+      : update.status === "update_available"
+        ? "status-success"
+        : "status-info";
+  status.className = `status-message status-inline ${statusClass} show`;
+  status.textContent = update.message;
 }
 
 function flashMessage(
@@ -381,8 +410,9 @@ async function wireActions(): Promise<void> {
 
   document.querySelector("#check-updates")?.addEventListener("click", async () => {
     try {
-      const response = await invoke<{ result: string }>("check_for_updates");
-      flashMessage(response.result, "info");
+      const response = await invoke<UpdateCheckResponse>("check_for_updates");
+      renderUpdateState(response);
+      flashMessage(response.message, response.status === "check_failed" ? "error" : "info");
       await loadState();
     } catch (error) {
       captureUiError(error, {
@@ -391,6 +421,21 @@ async function wireActions(): Promise<void> {
         installationId: currentState?.installation_id ?? undefined,
       });
       flashMessage(`Update check failed: ${String(error)}`, "error");
+    }
+  });
+
+  document.querySelector("#install-update")?.addEventListener("click", async () => {
+    try {
+      const response = await invoke<string>("install_update");
+      flashMessage(response, "success");
+      await loadState();
+    } catch (error) {
+      captureUiError(error, {
+        action: "install_update_failed",
+        errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+        installationId: currentState?.installation_id ?? undefined,
+      });
+      flashMessage(`Update install failed: ${String(error)}`, "error");
     }
   });
 
