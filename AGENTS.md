@@ -21,6 +21,21 @@ For ResetPing v1, contributors must preserve subsystem boundaries: Rust owns `st
 
 Before merge, PRs must pass `typecheck`, `build`, `cargo test`, `cargo fmt --check`, and `cargo clippy -- -D warnings`.
 
+## Dependency Management Rules (Mandatory)
+- Never add, remove, or bump dependencies by manually editing manifest files.
+- Manual manifest edits are prohibited for dependency changes in:
+  - `package.json`
+  - `src-tauri/Cargo.toml`
+  - any Python dependency manifest in this repo (for example `pyproject.toml`, `requirements*.txt`)
+- Use ecosystem-native package manager commands only:
+  - Node: `npm add`, `npm add -D`, `npm remove`, `npm update`
+  - Rust: `cargo add`, `cargo rm`, `cargo update`
+  - Python (uv projects): `uv add`, `uv remove`, `uv lock`
+- After dependency changes:
+  - Commit the lockfile updates produced by the package manager.
+  - Run the relevant validation commands and include results in the PR description.
+- If a dependency change cannot be expressed with package-manager commands, stop and document the blocker instead of editing manifests directly.
+
 ## Coding Style & Naming Conventions
 - TypeScript: 2-space indentation, semicolons, `camelCase` for variables/functions, `PascalCase` for types/classes.
 - Rust: `rustfmt` defaults (4-space indentation), `snake_case` for functions/modules, `PascalCase` for structs/enums.
