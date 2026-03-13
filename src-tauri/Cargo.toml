@@ -9,18 +9,19 @@ edition = "2021"
 name = "resetping_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rand = "0.8"
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-opener = "2"
-tauri-plugin-notification = "2"
-tauri-plugin-autostart = "2"
-tauri-plugin-clipboard-manager = "2"
-tokio = { version = "1", features = ["time"] }
-sentry = "0.45"
+dotenvy = "0.15.7"
+rand = "0.10.0"
+reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls"] }
+sentry = "0.47.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tauri = { version = "2.10.3", features = ["tray-icon"] }
+tauri-plugin-autostart = "2.5.1"
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-opener = "2.5.3"
+tokio = { version = "1.50.0", features = ["time"] }
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }

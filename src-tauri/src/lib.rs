@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use rand::Rng;
+use rand::RngExt as _;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -328,6 +328,8 @@ fn init_telemetry(enabled: bool) {
         return;
     }
 
+    let _ = dotenvy::dotenv();
+
     let Ok(dsn) = std::env::var("SENTRY_DSN") else {
         return;
     };
@@ -336,6 +338,9 @@ fn init_telemetry(enabled: bool) {
         dsn,
         sentry::ClientOptions {
             release: sentry::release_name!(),
+            // Capture user IPs and potentially sensitive headers when using HTTP server integrations
+            // see https://docs.sentry.io/platforms/rust/data-management/data-collected for more info
+            // send_default_pii: true,
             ..Default::default()
         },
     ));
@@ -344,9 +349,25 @@ fn init_telemetry(enabled: bool) {
     sentry::capture_message("ResetPing telemetry initialized", sentry::Level::Info);
 }
 
-fn capture_telemetry_error(message: &str) {
+fn endpoint_host(input: &str) -> Option<String> {
+    reqwest::Url::parse(input)
+        .ok()
+        .and_then(|u| u.host_str().map(ToString::to_string))
+}
+
+fn capture_telemetry_error(message: &str, component: &str, error_kind: &str) {
     if SENTRY_GUARD.get().is_some() {
-        sentry::capture_message(message, sentry::Level::Error);
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("event_type", "backend_error");
+                scope.set_tag("component", component.to_string());
+                scope.set_tag("error_kind", error_kind.to_string());
+            },
+            || {
+                let err = std::io::Error::other(message.to_string());
+                sentry::capture_error(&err)
+            },
+        );
     }
 }
 
@@ -525,7 +546,20 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
                     guard.snapshot.consecutive_failures.saturating_add(1);
                 guard.snapshot.last_error_summary = Some(err.clone());
                 if guard.settings.telemetry_enabled {
-                    capture_telemetry_error(&format!("Polling failed: {err}"));
+                    sentry::with_scope(
+                        |scope| {
+                            scope.set_tag("event_type", "backend_error");
+                            scope.set_tag("component", "poll_engine");
+                            scope.set_tag("error_kind", "poll_failed");
+                            if let Some(host) = endpoint_host(&guard.settings.status_endpoint_url) {
+                                scope.set_extra("endpoint_host", host.into());
+                            }
+                        },
+                        || {
+                            let error = std::io::Error::other(format!("Polling failed: {err}"));
+                            sentry::capture_error(&error)
+                        },
+                    );
                 }
 
                 push_log(&mut guard, "error", format!("Polling failed: {err}"));
@@ -547,8 +581,21 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
         emit_state_changed(&app, &guard);
     }
 
-    let guard = state.inner.lock().unwrap();
-    let _ = save_persistent(&app, &guard);
+    let mut guard = state.inner.lock().unwrap();
+    if let Err(err) = save_persistent(&app, &guard) {
+        push_log(
+            &mut guard,
+            "error",
+            format!("Failed to persist state: {err}"),
+        );
+        if guard.settings.telemetry_enabled {
+            capture_telemetry_error(
+                &format!("State persistence failed after poll: {err}"),
+                "state_store",
+                "persist_failed",
+            );
+        }
+    }
     drop(guard);
 
     if let Some((title, body)) = notify {
@@ -572,7 +619,7 @@ fn spawn_poll_loop(app: AppHandle, state: SharedState) {
                 }
             };
 
-            let jitter = rand::thread_rng().gen_range(0_u64..=5_u64);
+            let jitter = rand::rng().random_range(0_u64..=5_u64);
             sleep(Duration::from_secs(base_interval.saturating_add(jitter))).await;
 
             perform_poll(app.clone(), state.clone(), "scheduled").await;
@@ -676,16 +723,35 @@ fn update_settings(
     settings: AppSettings,
 ) -> Result<AppSettings, String> {
     let settings = sanitize_settings(settings);
+    let telemetry_enabled = settings.telemetry_enabled;
 
     {
         let mut guard = state.inner.lock().unwrap();
         guard.settings = settings.clone();
         push_log(&mut guard, "info", "Settings updated");
         emit_state_changed(&app, &guard);
-        save_persistent(&app, &guard)?;
+        if let Err(err) = save_persistent(&app, &guard) {
+            if telemetry_enabled {
+                capture_telemetry_error(
+                    &format!("Failed to save settings: {err}"),
+                    "state_store",
+                    "save_settings_failed",
+                );
+            }
+            return Err(err);
+        }
     }
 
-    set_autostart(&app, settings.launch_at_login)?;
+    if let Err(err) = set_autostart(&app, settings.launch_at_login) {
+        if telemetry_enabled {
+            capture_telemetry_error(
+                &format!("Autostart update failed: {err}"),
+                "autostart",
+                "update_failed",
+            );
+        }
+        return Err(err);
+    }
     init_telemetry(settings.telemetry_enabled);
 
     Ok(settings)
@@ -740,6 +806,31 @@ fn check_for_updates(state: State<'_, SharedState>) -> UpdateCheckResponse {
     }
 }
 
+#[tauri::command]
+fn send_test_telemetry_event(state: State<'_, SharedState>) -> Result<String, String> {
+    let guard = state.inner.lock().unwrap();
+    if !guard.settings.telemetry_enabled {
+        return Err("Telemetry is disabled in settings.".to_string());
+    }
+    drop(guard);
+
+    if SENTRY_GUARD.get().is_none() {
+        return Err("Sentry is not initialized. Set SENTRY_DSN and restart app.".to_string());
+    }
+
+    let id = sentry::with_scope(
+        |scope| {
+            scope.set_tag("event_type", "manual_telemetry_test");
+            scope.set_extra("source", "settings_button".into());
+        },
+        || {
+            let err = std::io::Error::other("Everything is on fire! (ResetPing telemetry test)");
+            sentry::capture_error(&err)
+        },
+    );
+    Ok(id.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -752,11 +843,6 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
-            #[cfg(target_os = "macos")]
-            app_handle
-                .set_activation_policy(ActivationPolicy::Accessory)
-                .map_err(|e| format!("failed to set activation policy: {e}"))?;
-
             let persistent = load_persistent(&app_handle);
 
             let mut state = RuntimeState {
@@ -781,12 +867,33 @@ pub fn run() {
                 guard.settings.telemetry_enabled
             });
 
-            set_autostart(&app_handle, {
+            #[cfg(target_os = "macos")]
+            if let Err(e) = app_handle.set_activation_policy(ActivationPolicy::Accessory) {
+                let message = format!("failed to set activation policy: {e}");
+                capture_telemetry_error(&message, "app_setup", "activation_policy_failed");
+                return Err(message.into());
+            }
+
+            if let Err(err) = set_autostart(&app_handle, {
                 let guard = shared.inner.lock().unwrap();
                 guard.settings.launch_at_login
-            })?;
+            }) {
+                capture_telemetry_error(
+                    &format!("Autostart setup failed at startup: {err}"),
+                    "autostart",
+                    "startup_setup_failed",
+                );
+                return Err(err.into());
+            }
 
-            build_tray(&app_handle)?;
+            if let Err(err) = build_tray(&app_handle) {
+                capture_telemetry_error(
+                    &format!("Tray setup failed: {err}"),
+                    "tray",
+                    "startup_setup_failed",
+                );
+                return Err(err.into());
+            }
 
             if let Some(win) = app_handle.get_webview_window("main") {
                 let _ = win.hide();
@@ -809,6 +916,7 @@ pub fn run() {
             send_test_notification_cmd,
             get_recent_logs,
             check_for_updates,
+            send_test_telemetry_event,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

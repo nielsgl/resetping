@@ -30,6 +30,7 @@ ResetPing is a tray-first desktop notifier for Codex reset status. It polls `htt
 - Update check command is currently a v1 stub and logs manual checks.
 - Sentry telemetry is env-driven (`SENTRY_DSN`) and currently limited to startup marker + polling errors.
 - Full signed updater integration is planned next hardening step.
+- On macOS, banner notifications may be suppressed while ResetPing is the active/focused app window. Tray-triggered/background notifications remain the most reliable visual path.
 
 ## Development
 
@@ -103,7 +104,15 @@ curl -X POST http://127.0.0.1:8787/admin/set \
 
 ### Telemetry test (`SENTRY_DSN`)
 
-1. Set DSN when launching dev app:
+1. Set DSN either via `.env` file in repo root or shell env:
+
+`.env` example:
+
+```bash
+SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
+```
+
+or launch-time env:
 
 ```bash
 SENTRY_DSN='https://<key>@<org>.ingest.sentry.io/<project>' npm run tauri dev
