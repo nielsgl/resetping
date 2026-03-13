@@ -51,6 +51,16 @@ npm install
 npm run tauri dev
 ```
 
+HTTP backend A/B in dev:
+
+```bash
+# Default (native-tls)
+npm run tauri dev
+
+# Rustls variant
+npm run tauri dev -- --no-default-features --features http-rustls
+```
+
 Quality checks:
 
 ```bash
