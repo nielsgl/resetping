@@ -26,8 +26,17 @@ const STATE_FILE: &str = "state.json";
 const TRANSITIONS_LIMIT: usize = 100;
 const LOG_LIMIT: usize = 200;
 const FAILURE_THRESHOLD: u32 = 5;
+#[cfg(debug_assertions)]
+const HEARTBEAT_INTERVAL_MS: u64 = 10 * 60 * 1000;
+#[cfg(not(debug_assertions))]
 const HEARTBEAT_INTERVAL_MS: u64 = 24 * 60 * 60 * 1000;
 static SENTRY_GUARD: OnceLock<sentry::ClientInitGuard> = OnceLock::new();
+
+#[cfg(all(feature = "http-native-tls", feature = "http-rustls"))]
+compile_error!("Enable only one HTTP backend feature: `http-native-tls` or `http-rustls`.");
+
+#[cfg(not(any(feature = "http-native-tls", feature = "http-rustls")))]
+compile_error!("One HTTP backend feature is required: `http-native-tls` or `http-rustls`.");
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -130,6 +139,8 @@ struct StatusApiPayload {
     configured: bool,
     #[serde(rename = "updatedAt")]
     updated_at: Option<u64>,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +149,15 @@ struct NormalizedStatus {
     source_timestamp_ms: Option<u64>,
     fetched_at_ms: u64,
     configured: bool,
+    transport: FetchTransport,
+    source_http_status: u16,
+    source_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FetchTransport {
+    Reqwest,
+    CurlFallback,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -205,6 +225,17 @@ fn build_channel() -> &'static str {
     }
 }
 
+fn http_backend_label() -> &'static str {
+    #[cfg(feature = "http-native-tls")]
+    {
+        "native-tls"
+    }
+    #[cfg(all(not(feature = "http-native-tls"), feature = "http-rustls"))]
+    {
+        "rustls"
+    }
+}
+
 fn default_installation_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
@@ -218,6 +249,10 @@ fn heartbeat_due(last_usage_heartbeat_at_ms: Option<u64>, now: u64) -> bool {
         None => true,
         Some(last) => now.saturating_sub(last) >= HEARTBEAT_INTERVAL_MS,
     }
+}
+
+fn should_emit_poll_failure_telemetry(consecutive_failures: u32) -> bool {
+    matches!(consecutive_failures, 1 | 5 | 20 | 100)
 }
 
 fn sanitize_settings(mut settings: AppSettings) -> AppSettings {
@@ -398,12 +433,6 @@ fn init_telemetry(enabled: bool, dsn: Option<&str>) {
     sentry::capture_message("ResetPing telemetry initialized", sentry::Level::Info);
 }
 
-fn endpoint_host(input: &str) -> Option<String> {
-    reqwest::Url::parse(input)
-        .ok()
-        .and_then(|u| u.host_str().map(ToString::to_string))
-}
-
 fn capture_telemetry_error(
     settings: &AppSettings,
     installation_id: &str,
@@ -430,6 +459,34 @@ fn capture_telemetry_error(
             sentry::capture_error(&err)
         },
     );
+}
+
+fn capture_telemetry_message(
+    settings: &AppSettings,
+    installation_id: &str,
+    event_type: &str,
+    component: &str,
+    level: sentry::Level,
+    message: &str,
+) -> Option<String> {
+    if !settings.error_telemetry_enabled || SENTRY_GUARD.get().is_none() {
+        return None;
+    }
+
+    Some(
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("event_type", event_type.to_string());
+                scope.set_tag("component", component.to_string());
+                scope.set_tag("platform", std::env::consts::OS.to_string());
+                scope.set_tag("app_version", env!("CARGO_PKG_VERSION").to_string());
+                scope.set_tag("build_channel", build_channel().to_string());
+                scope.set_tag("installation_id", installation_id.to_string());
+            },
+            || sentry::capture_message(message, level),
+        )
+        .to_string(),
+    )
 }
 
 fn capture_usage_event(
@@ -474,28 +531,57 @@ fn low_power_mode_active() -> bool {
 }
 
 async fn fetch_status(settings: &AppSettings) -> Result<NormalizedStatus, String> {
-    let client = Client::builder()
-        .timeout(Duration::from_millis(settings.http_timeout_ms))
+    let mut builder = Client::builder().timeout(Duration::from_millis(settings.http_timeout_ms));
+    #[cfg(feature = "http-native-tls")]
+    {
+        builder = builder.use_native_tls();
+    }
+    #[cfg(feature = "http-rustls")]
+    {
+        builder = builder.use_rustls_tls();
+    }
+
+    let client = builder
         .build()
-        .map_err(|e| format!("failed to build client: {e}"))?;
+        .map_err(|e| format!("failed to build client: {e:#} (debug: {e:?})"))?;
 
     let response = client
         .get(settings.status_endpoint_url.clone())
         .header("cache-control", "no-store")
         .header("user-agent", APP_USER_AGENT)
         .send()
-        .await
-        .map_err(|e| format!("request failed: {e}"))?;
+        .await;
+
+    let response = match response {
+        Ok(resp) => resp,
+        Err(err) => {
+            let msg = format!("request failed: {err:#} (debug: {err:?})");
+            if msg.to_lowercase().contains("bad file descriptor") {
+                return fetch_status_via_curl(settings)
+                    .await
+                    .map_err(|fallback_err| {
+                        format!("{msg}; curl fallback failed: {fallback_err}")
+                    });
+            }
+            return Err(msg);
+        }
+    };
 
     let status = response.status();
-    if !status.is_success() {
-        return Err(format!("request failed with status {status}"));
-    }
-
-    let payload: StatusApiPayload = response
-        .json()
+    let body = response
+        .text()
         .await
-        .map_err(|e| format!("invalid response body: {e}"))?;
+        .map_err(|e| format!("invalid response body: {e:#} (debug: {e:?})"))?;
+
+    let payload: StatusApiPayload = serde_json::from_str(&body).map_err(|e| {
+        if status.is_success() {
+            format!("invalid response body: {e:#} (debug: {e:?})")
+        } else {
+            format!(
+                "request failed with status {status} and unparsable body: {e:#} (debug: {e:?}); body={body}"
+            )
+        }
+    })?;
 
     let effective_state = if payload.state == "no" { "no" } else { "yes" };
 
@@ -504,6 +590,67 @@ async fn fetch_status(settings: &AppSettings) -> Result<NormalizedStatus, String
         source_timestamp_ms: payload.updated_at,
         fetched_at_ms: now_ms(),
         configured: payload.configured,
+        transport: FetchTransport::Reqwest,
+        source_http_status: status.as_u16(),
+        source_error: payload.error,
+    })
+}
+
+async fn fetch_status_via_curl(settings: &AppSettings) -> Result<NormalizedStatus, String> {
+    let timeout_secs = std::cmp::max(1, settings.http_timeout_ms.div_ceil(1000));
+    let endpoint = settings.status_endpoint_url.clone();
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        Command::new("curl")
+            .args([
+                "--silent",
+                "--show-error",
+                "--max-time",
+                &timeout_secs.to_string(),
+                "--connect-timeout",
+                &timeout_secs.to_string(),
+                "--header",
+                "cache-control: no-store",
+                "--user-agent",
+                APP_USER_AGENT,
+                "--write-out",
+                "\n__HTTP_STATUS__:%{http_code}",
+                &endpoint,
+            ])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("curl fallback join error: {e}"))?
+    .map_err(|e| format!("curl fallback execution failed: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!(
+            "curl fallback request failed with status {}: {}",
+            output.status, stderr
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let (body, status_code) = stdout
+        .rsplit_once("\n__HTTP_STATUS__:")
+        .ok_or_else(|| "curl fallback missing HTTP status trailer".to_string())?;
+    let status_code: u16 = status_code
+        .trim()
+        .parse()
+        .map_err(|e| format!("curl fallback invalid HTTP status trailer: {e}"))?;
+
+    let payload: StatusApiPayload = serde_json::from_str(body)
+        .map_err(|e| format!("curl fallback invalid response body: {e:#} (debug: {e:?})"))?;
+    let effective_state = if payload.state == "no" { "no" } else { "yes" };
+
+    Ok(NormalizedStatus {
+        effective_state: effective_state.to_string(),
+        source_timestamp_ms: payload.updated_at,
+        fetched_at_ms: now_ms(),
+        configured: payload.configured,
+        transport: FetchTransport::CurlFallback,
+        source_http_status: status_code,
+        source_error: payload.error,
     })
 }
 
@@ -596,13 +743,57 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
 
         match outcome {
             Ok(status) => {
+                if matches!(status.transport, FetchTransport::CurlFallback) {
+                    push_log(
+                        &mut guard,
+                        "warn",
+                        "Polling succeeded via curl fallback (reqwest connect failed)",
+                    );
+                } else {
+                    push_log(&mut guard, "info", "Polling succeeded via reqwest");
+                }
+                if status.source_http_status >= 400 {
+                    let upstream = status
+                        .source_error
+                        .as_deref()
+                        .unwrap_or("no upstream error message");
+                    push_log(
+                        &mut guard,
+                        "warn",
+                        format!(
+                            "Upstream returned HTTP {} but provided status payload ({upstream})",
+                            status.source_http_status
+                        ),
+                    );
+                }
+
                 let previous = guard.snapshot.last_known_state.clone();
+                let previous_failures = guard.snapshot.consecutive_failures;
                 let current = status.effective_state.clone();
 
                 guard.snapshot.last_success_at = Some(status.fetched_at_ms);
                 guard.snapshot.consecutive_failures = 0;
                 guard.snapshot.last_error_summary = None;
                 guard.snapshot.last_known_state = Some(current.clone());
+
+                if previous_failures > 0 {
+                    if let Some(event_id) = capture_telemetry_message(
+                        &guard.settings,
+                        &guard.installation_id,
+                        "failure_streak_recovered",
+                        "poll_engine",
+                        sentry::Level::Info,
+                        &format!(
+                            "Polling recovered after {previous_failures} consecutive failures"
+                        ),
+                    ) {
+                        push_log(
+                            &mut guard,
+                            "info",
+                            format!("Telemetry recovery event sent: {}", event_id),
+                        );
+                    }
+                }
 
                 if let Some(prev) = previous {
                     if prev != current {
@@ -665,25 +856,24 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
                 guard.snapshot.consecutive_failures =
                     guard.snapshot.consecutive_failures.saturating_add(1);
                 guard.snapshot.last_error_summary = Some(err.clone());
-                if guard.settings.error_telemetry_enabled {
-                    sentry::with_scope(
-                        |scope| {
-                            scope.set_tag("event_type", "error");
-                            scope.set_tag("component", "poll_engine");
-                            scope.set_tag("error_kind", "poll_failed");
-                            scope.set_tag("platform", std::env::consts::OS.to_string());
-                            scope.set_tag("app_version", env!("CARGO_PKG_VERSION").to_string());
-                            scope.set_tag("build_channel", build_channel().to_string());
-                            scope.set_tag("installation_id", guard.installation_id.clone());
-                            if let Some(host) = endpoint_host(&guard.settings.status_endpoint_url) {
-                                scope.set_extra("endpoint_host", host.into());
-                            }
-                        },
-                        || {
-                            let error = std::io::Error::other(format!("Polling failed: {err}"));
-                            sentry::capture_error(&error)
-                        },
-                    );
+                if should_emit_poll_failure_telemetry(guard.snapshot.consecutive_failures) {
+                    if let Some(sentry_event_id) = capture_telemetry_message(
+                        &guard.settings,
+                        &guard.installation_id,
+                        "error",
+                        "poll_engine",
+                        sentry::Level::Error,
+                        &format!(
+                            "Polling failed (consecutive={}): {err}",
+                            guard.snapshot.consecutive_failures
+                        ),
+                    ) {
+                        push_log(
+                            &mut guard,
+                            "info",
+                            format!("Telemetry error event sent: {}", sentry_event_id),
+                        );
+                    }
                 }
 
                 push_log(&mut guard, "error", format!("Polling failed: {err}"));
@@ -1023,6 +1213,11 @@ pub fn run() {
             };
 
             push_log(&mut state, "info", "ResetPing started");
+            push_log(
+                &mut state,
+                "info",
+                format!("HTTP backend selected: {}", http_backend_label()),
+            );
 
             let shared = SharedState {
                 inner: Arc::new(Mutex::new(state)),
@@ -1121,6 +1316,7 @@ mod tests {
             state: "maybe".to_string(),
             configured: true,
             updated_at: Some(123),
+            error: None,
         };
         let effective = if payload.state == "no" { "no" } else { "yes" };
         assert_eq!(effective, "yes");
@@ -1189,5 +1385,16 @@ mod tests {
             1_000 + HEARTBEAT_INTERVAL_MS - 1
         ));
         assert!(heartbeat_due(Some(1_000), 1_000 + HEARTBEAT_INTERVAL_MS));
+    }
+
+    #[test]
+    fn poll_failure_telemetry_thresholds_are_throttled() {
+        assert!(should_emit_poll_failure_telemetry(1));
+        assert!(!should_emit_poll_failure_telemetry(2));
+        assert!(should_emit_poll_failure_telemetry(5));
+        assert!(!should_emit_poll_failure_telemetry(6));
+        assert!(should_emit_poll_failure_telemetry(20));
+        assert!(should_emit_poll_failure_telemetry(100));
+        assert!(!should_emit_poll_failure_telemetry(101));
     }
 }
