@@ -26,6 +26,7 @@ const STATE_FILE: &str = "state.json";
 const TRANSITIONS_LIMIT: usize = 100;
 const LOG_LIMIT: usize = 200;
 const FAILURE_THRESHOLD: u32 = 5;
+const HEARTBEAT_INTERVAL_MS: u64 = 24 * 60 * 60 * 1000;
 static SENTRY_GUARD: OnceLock<sentry::ClientInitGuard> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -57,7 +58,11 @@ struct AppSettings {
     #[serde(default = "default_endpoint_url")]
     status_endpoint_url: String,
     #[serde(default = "default_true")]
-    telemetry_enabled: bool,
+    error_telemetry_enabled: bool,
+    #[serde(default)]
+    usage_telemetry_enabled: bool,
+    #[serde(default, rename = "telemetry_enabled", skip_serializing)]
+    legacy_telemetry_enabled: Option<bool>,
 }
 
 impl Default for AppSettings {
@@ -72,7 +77,9 @@ impl Default for AppSettings {
             update_checks_enabled: false,
             update_check_interval_hours: default_update_check_interval_hours(),
             status_endpoint_url: default_endpoint_url(),
-            telemetry_enabled: true,
+            error_telemetry_enabled: true,
+            usage_telemetry_enabled: false,
+            legacy_telemetry_enabled: None,
         }
     }
 }
@@ -107,6 +114,8 @@ struct AppStateResponse {
     transitions: Vec<TransitionEntry>,
     logs: Vec<LogEntry>,
     health: String,
+    installation_id: String,
+    frontend_telemetry_dsn: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -136,6 +145,8 @@ struct PersistentData {
     settings: AppSettings,
     snapshot: RuntimeSnapshot,
     transitions: Vec<TransitionEntry>,
+    installation_id: Option<String>,
+    last_usage_heartbeat_at_ms: Option<u64>,
 }
 
 struct RuntimeState {
@@ -145,6 +156,9 @@ struct RuntimeState {
     logs: VecDeque<LogEntry>,
     in_flight: bool,
     last_update_check_ms: Option<u64>,
+    installation_id: String,
+    last_usage_heartbeat_at_ms: Option<u64>,
+    sentry_dsn: Option<String>,
 }
 
 #[derive(Clone)]
@@ -183,7 +197,35 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
+fn build_channel() -> &'static str {
+    if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    }
+}
+
+fn default_installation_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+fn telemetry_enabled(settings: &AppSettings) -> bool {
+    settings.error_telemetry_enabled || settings.usage_telemetry_enabled
+}
+
+fn heartbeat_due(last_usage_heartbeat_at_ms: Option<u64>, now: u64) -> bool {
+    match last_usage_heartbeat_at_ms {
+        None => true,
+        Some(last) => now.saturating_sub(last) >= HEARTBEAT_INTERVAL_MS,
+    }
+}
+
 fn sanitize_settings(mut settings: AppSettings) -> AppSettings {
+    if let Some(legacy) = settings.legacy_telemetry_enabled.take() {
+        settings.error_telemetry_enabled = legacy;
+        settings.usage_telemetry_enabled = legacy;
+    }
+
     settings.poll_interval_sec = settings.poll_interval_sec.clamp(30, 900);
     settings.low_power_poll_interval_sec = settings.low_power_poll_interval_sec.clamp(60, 900);
     settings.http_timeout_ms = settings.http_timeout_ms.clamp(1_000, 30_000);
@@ -248,6 +290,8 @@ fn save_persistent(app: &AppHandle, state: &RuntimeState) -> Result<(), String> 
         settings: state.settings.clone(),
         snapshot: state.snapshot.clone(),
         transitions: state.transitions.iter().cloned().collect(),
+        installation_id: Some(state.installation_id.clone()),
+        last_usage_heartbeat_at_ms: state.last_usage_heartbeat_at_ms,
     };
 
     let json = serde_json::to_string_pretty(&payload)
@@ -264,6 +308,8 @@ fn emit_state_changed(app: &AppHandle, runtime: &RuntimeState) {
             transitions: runtime.transitions.iter().cloned().collect(),
             logs: runtime.logs.iter().cloned().collect(),
             health: health_label(&runtime.snapshot),
+            installation_id: runtime.installation_id.clone(),
+            frontend_telemetry_dsn: runtime.sentry_dsn.clone(),
         },
     );
 }
@@ -323,14 +369,17 @@ fn build_status_line(snapshot: &RuntimeSnapshot) -> String {
     format!("State: {state} | Health: {health} | Last success: {last}")
 }
 
-fn init_telemetry(enabled: bool) {
+fn resolve_sentry_dsn() -> Option<String> {
+    let _ = dotenvy::dotenv();
+    std::env::var("SENTRY_DSN").ok()
+}
+
+fn init_telemetry(enabled: bool, dsn: Option<&str>) {
     if !enabled {
         return;
     }
 
-    let _ = dotenvy::dotenv();
-
-    let Ok(dsn) = std::env::var("SENTRY_DSN") else {
+    let Some(dsn) = dsn else {
         return;
     };
 
@@ -355,20 +404,58 @@ fn endpoint_host(input: &str) -> Option<String> {
         .and_then(|u| u.host_str().map(ToString::to_string))
 }
 
-fn capture_telemetry_error(message: &str, component: &str, error_kind: &str) {
-    if SENTRY_GUARD.get().is_some() {
-        sentry::with_scope(
-            |scope| {
-                scope.set_tag("event_type", "backend_error");
-                scope.set_tag("component", component.to_string());
-                scope.set_tag("error_kind", error_kind.to_string());
-            },
-            || {
-                let err = std::io::Error::other(message.to_string());
-                sentry::capture_error(&err)
-            },
-        );
+fn capture_telemetry_error(
+    settings: &AppSettings,
+    installation_id: &str,
+    message: &str,
+    component: &str,
+    error_kind: &str,
+) {
+    if !settings.error_telemetry_enabled || SENTRY_GUARD.get().is_none() {
+        return;
     }
+
+    sentry::with_scope(
+        |scope| {
+            scope.set_tag("event_type", "error");
+            scope.set_tag("component", component.to_string());
+            scope.set_tag("error_kind", error_kind.to_string());
+            scope.set_tag("platform", std::env::consts::OS.to_string());
+            scope.set_tag("app_version", env!("CARGO_PKG_VERSION").to_string());
+            scope.set_tag("build_channel", build_channel().to_string());
+            scope.set_tag("installation_id", installation_id.to_string());
+        },
+        || {
+            let err = std::io::Error::other(message.to_string());
+            sentry::capture_error(&err)
+        },
+    );
+}
+
+fn capture_usage_event(
+    settings: &AppSettings,
+    installation_id: &str,
+    event_type: &str,
+    component: &str,
+    message: &str,
+) {
+    if !settings.usage_telemetry_enabled || SENTRY_GUARD.get().is_none() {
+        return;
+    }
+
+    sentry::with_scope(
+        |scope| {
+            scope.set_tag("event_type", event_type.to_string());
+            scope.set_tag("component", component.to_string());
+            scope.set_tag("platform", std::env::consts::OS.to_string());
+            scope.set_tag("app_version", env!("CARGO_PKG_VERSION").to_string());
+            scope.set_tag("build_channel", build_channel().to_string());
+            scope.set_tag("installation_id", installation_id.to_string());
+        },
+        || {
+            sentry::capture_message(message, sentry::Level::Info);
+        },
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -446,6 +533,13 @@ async fn maybe_check_updates(app: &AppHandle, state: &SharedState) {
     {
         let mut guard = state.inner.lock().unwrap();
         guard.last_update_check_ms = Some(now);
+        capture_usage_event(
+            &guard.settings,
+            &guard.installation_id,
+            "update_check",
+            "updater",
+            "Background update check requested",
+        );
         push_log(
             &mut guard,
             "info",
@@ -453,6 +547,24 @@ async fn maybe_check_updates(app: &AppHandle, state: &SharedState) {
         );
         emit_state_changed(app, &guard);
     }
+}
+
+fn maybe_emit_usage_heartbeat(app: &AppHandle, guard: &mut RuntimeState) {
+    let now = now_ms();
+    if !heartbeat_due(guard.last_usage_heartbeat_at_ms, now) {
+        return;
+    }
+
+    capture_usage_event(
+        &guard.settings,
+        &guard.installation_id,
+        "heartbeat",
+        "poll_engine",
+        "Usage heartbeat emitted",
+    );
+    guard.last_usage_heartbeat_at_ms = Some(now);
+    push_log(&mut *guard, "info", "Usage heartbeat emitted");
+    let _ = save_persistent(app, guard);
 }
 
 async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
@@ -517,6 +629,14 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
                             ));
                         }
 
+                        capture_usage_event(
+                            &guard.settings,
+                            &guard.installation_id,
+                            "transition_detected",
+                            "poll_engine",
+                            &format!("State transition detected: {prev} -> {current}"),
+                        );
+
                         push_log(
                             &mut guard,
                             "info",
@@ -545,12 +665,16 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
                 guard.snapshot.consecutive_failures =
                     guard.snapshot.consecutive_failures.saturating_add(1);
                 guard.snapshot.last_error_summary = Some(err.clone());
-                if guard.settings.telemetry_enabled {
+                if guard.settings.error_telemetry_enabled {
                     sentry::with_scope(
                         |scope| {
-                            scope.set_tag("event_type", "backend_error");
+                            scope.set_tag("event_type", "error");
                             scope.set_tag("component", "poll_engine");
                             scope.set_tag("error_kind", "poll_failed");
+                            scope.set_tag("platform", std::env::consts::OS.to_string());
+                            scope.set_tag("app_version", env!("CARGO_PKG_VERSION").to_string());
+                            scope.set_tag("build_channel", build_channel().to_string());
+                            scope.set_tag("installation_id", guard.installation_id.clone());
                             if let Some(host) = endpoint_host(&guard.settings.status_endpoint_url) {
                                 scope.set_extra("endpoint_host", host.into());
                             }
@@ -588,8 +712,10 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
             "error",
             format!("Failed to persist state: {err}"),
         );
-        if guard.settings.telemetry_enabled {
+        if guard.settings.error_telemetry_enabled {
             capture_telemetry_error(
+                &guard.settings,
+                &guard.installation_id,
                 &format!("State persistence failed after poll: {err}"),
                 "state_store",
                 "persist_failed",
@@ -608,6 +734,11 @@ fn spawn_poll_loop(app: AppHandle, state: SharedState) {
         perform_poll(app.clone(), state.clone(), "startup").await;
 
         loop {
+            {
+                let mut guard = state.inner.lock().unwrap();
+                maybe_emit_usage_heartbeat(&app, &mut guard);
+                emit_state_changed(&app, &guard);
+            }
             maybe_check_updates(&app, &state).await;
 
             let base_interval = {
@@ -713,6 +844,8 @@ fn get_app_state(state: State<'_, SharedState>) -> Result<AppStateResponse, Stri
         transitions: guard.transitions.iter().cloned().collect(),
         logs: guard.logs.iter().cloned().collect(),
         health: health_label(&guard.snapshot),
+        installation_id: guard.installation_id.clone(),
+        frontend_telemetry_dsn: guard.sentry_dsn.clone(),
     })
 }
 
@@ -723,7 +856,7 @@ fn update_settings(
     settings: AppSettings,
 ) -> Result<AppSettings, String> {
     let settings = sanitize_settings(settings);
-    let telemetry_enabled = settings.telemetry_enabled;
+    let any_telemetry_enabled = telemetry_enabled(&settings);
 
     {
         let mut guard = state.inner.lock().unwrap();
@@ -731,8 +864,10 @@ fn update_settings(
         push_log(&mut guard, "info", "Settings updated");
         emit_state_changed(&app, &guard);
         if let Err(err) = save_persistent(&app, &guard) {
-            if telemetry_enabled {
+            if guard.settings.error_telemetry_enabled {
                 capture_telemetry_error(
+                    &guard.settings,
+                    &guard.installation_id,
                     &format!("Failed to save settings: {err}"),
                     "state_store",
                     "save_settings_failed",
@@ -743,8 +878,14 @@ fn update_settings(
     }
 
     if let Err(err) = set_autostart(&app, settings.launch_at_login) {
-        if telemetry_enabled {
+        if settings.error_telemetry_enabled {
+            let installation_id = {
+                let guard = state.inner.lock().unwrap();
+                guard.installation_id.clone()
+            };
             capture_telemetry_error(
+                &settings,
+                &installation_id,
                 &format!("Autostart update failed: {err}"),
                 "autostart",
                 "update_failed",
@@ -752,7 +893,11 @@ fn update_settings(
         }
         return Err(err);
     }
-    init_telemetry(settings.telemetry_enabled);
+    let dsn = {
+        let guard = state.inner.lock().unwrap();
+        guard.sentry_dsn.clone()
+    };
+    init_telemetry(any_telemetry_enabled, dsn.as_deref());
 
     Ok(settings)
 }
@@ -794,6 +939,13 @@ fn check_for_updates(state: State<'_, SharedState>) -> UpdateCheckResponse {
     let mut guard = state.inner.lock().unwrap();
     let now = now_ms();
     guard.last_update_check_ms = Some(now);
+    capture_usage_event(
+        &guard.settings,
+        &guard.installation_id,
+        "update_check",
+        "updater",
+        "Manual update check requested",
+    );
     push_log(
         &mut guard,
         "info",
@@ -809,9 +961,10 @@ fn check_for_updates(state: State<'_, SharedState>) -> UpdateCheckResponse {
 #[tauri::command]
 fn send_test_telemetry_event(state: State<'_, SharedState>) -> Result<String, String> {
     let guard = state.inner.lock().unwrap();
-    if !guard.settings.telemetry_enabled {
-        return Err("Telemetry is disabled in settings.".to_string());
+    if !guard.settings.error_telemetry_enabled {
+        return Err("Error telemetry is disabled in settings.".to_string());
     }
+    let installation_id = guard.installation_id.clone();
     drop(guard);
 
     if SENTRY_GUARD.get().is_none() {
@@ -820,7 +973,13 @@ fn send_test_telemetry_event(state: State<'_, SharedState>) -> Result<String, St
 
     let id = sentry::with_scope(
         |scope| {
-            scope.set_tag("event_type", "manual_telemetry_test");
+            scope.set_tag("event_type", "error");
+            scope.set_tag("component", "ui");
+            scope.set_tag("error_kind", "manual_telemetry_test");
+            scope.set_tag("platform", std::env::consts::OS.to_string());
+            scope.set_tag("app_version", env!("CARGO_PKG_VERSION").to_string());
+            scope.set_tag("build_channel", build_channel().to_string());
+            scope.set_tag("installation_id", installation_id.clone());
             scope.set_extra("source", "settings_button".into());
         },
         || {
@@ -844,14 +1003,23 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
             let persistent = load_persistent(&app_handle);
+            let settings = sanitize_settings(persistent.settings);
+            let installation_id = persistent
+                .installation_id
+                .unwrap_or_else(default_installation_id);
+            let sentry_dsn = resolve_sentry_dsn();
+            let telemetry_active = telemetry_enabled(&settings);
 
             let mut state = RuntimeState {
-                settings: sanitize_settings(persistent.settings),
+                settings,
                 snapshot: persistent.snapshot,
                 transitions: VecDeque::from(persistent.transitions),
                 logs: VecDeque::new(),
                 in_flight: false,
                 last_update_check_ms: None,
+                installation_id,
+                last_usage_heartbeat_at_ms: persistent.last_usage_heartbeat_at_ms,
+                sentry_dsn,
             };
 
             push_log(&mut state, "info", "ResetPing started");
@@ -862,15 +1030,29 @@ pub fn run() {
 
             app.manage(shared.clone());
 
-            init_telemetry({
+            {
                 let guard = shared.inner.lock().unwrap();
-                guard.settings.telemetry_enabled
-            });
+                init_telemetry(telemetry_active, guard.sentry_dsn.as_deref());
+                capture_usage_event(
+                    &guard.settings,
+                    &guard.installation_id,
+                    "app_open",
+                    "app_setup",
+                    "ResetPing app open event",
+                );
+            }
 
             #[cfg(target_os = "macos")]
             if let Err(e) = app_handle.set_activation_policy(ActivationPolicy::Accessory) {
                 let message = format!("failed to set activation policy: {e}");
-                capture_telemetry_error(&message, "app_setup", "activation_policy_failed");
+                let guard = shared.inner.lock().unwrap();
+                capture_telemetry_error(
+                    &guard.settings,
+                    &guard.installation_id,
+                    &message,
+                    "app_setup",
+                    "activation_policy_failed",
+                );
                 return Err(message.into());
             }
 
@@ -878,7 +1060,10 @@ pub fn run() {
                 let guard = shared.inner.lock().unwrap();
                 guard.settings.launch_at_login
             }) {
+                let guard = shared.inner.lock().unwrap();
                 capture_telemetry_error(
+                    &guard.settings,
+                    &guard.installation_id,
                     &format!("Autostart setup failed at startup: {err}"),
                     "autostart",
                     "startup_setup_failed",
@@ -887,7 +1072,10 @@ pub fn run() {
             }
 
             if let Err(err) = build_tray(&app_handle) {
+                let guard = shared.inner.lock().unwrap();
                 capture_telemetry_error(
+                    &guard.settings,
+                    &guard.installation_id,
                     &format!("Tray setup failed: {err}"),
                     "tray",
                     "startup_setup_failed",
@@ -900,7 +1088,8 @@ pub fn run() {
             }
 
             {
-                let guard = shared.inner.lock().unwrap();
+                let mut guard = shared.inner.lock().unwrap();
+                maybe_emit_usage_heartbeat(&app_handle, &mut guard);
                 update_tray_tooltip(&app_handle, &guard.snapshot);
                 emit_state_changed(&app_handle, &guard);
             }
@@ -949,7 +1138,9 @@ mod tests {
             update_checks_enabled: false,
             update_check_interval_hours: 1_000,
             status_endpoint_url: "".to_string(),
-            telemetry_enabled: true,
+            error_telemetry_enabled: true,
+            usage_telemetry_enabled: false,
+            legacy_telemetry_enabled: None,
         };
 
         let sanitized = sanitize_settings(settings);
@@ -965,5 +1156,38 @@ mod tests {
         let mut snapshot = RuntimeSnapshot::default();
         snapshot.consecutive_failures = FAILURE_THRESHOLD;
         assert!(is_degraded(&snapshot));
+    }
+
+    #[test]
+    fn migrates_legacy_telemetry_toggle() {
+        let settings = AppSettings {
+            poll_interval_sec: default_poll_interval_sec(),
+            low_power_poll_interval_sec: default_low_power_poll_interval_sec(),
+            http_timeout_ms: default_http_timeout_ms(),
+            notification_policy: NotificationPolicy::Flip,
+            notify_initial_state: true,
+            launch_at_login: false,
+            update_checks_enabled: false,
+            update_check_interval_hours: default_update_check_interval_hours(),
+            status_endpoint_url: default_endpoint_url(),
+            error_telemetry_enabled: true,
+            usage_telemetry_enabled: false,
+            legacy_telemetry_enabled: Some(false),
+        };
+
+        let sanitized = sanitize_settings(settings);
+        assert!(!sanitized.error_telemetry_enabled);
+        assert!(!sanitized.usage_telemetry_enabled);
+        assert!(sanitized.legacy_telemetry_enabled.is_none());
+    }
+
+    #[test]
+    fn heartbeat_due_logic_respects_interval() {
+        assert!(heartbeat_due(None, HEARTBEAT_INTERVAL_MS));
+        assert!(!heartbeat_due(
+            Some(1_000),
+            1_000 + HEARTBEAT_INTERVAL_MS - 1
+        ));
+        assert!(heartbeat_due(Some(1_000), 1_000 + HEARTBEAT_INTERVAL_MS));
     }
 }
