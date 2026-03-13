@@ -66,3 +66,10 @@ cd src-tauri && cargo clippy -- -D warnings
 ```
 
 Local hooks improve feedback speed but CI is the final gate.
+
+## Merge strategy
+
+- Merge pull requests to `main` with a merge commit (`--no-ff`).
+- In GitHub, select **Create a merge commit**.
+- Do not use squash merge or rebase merge for `main`.
+- Keep branch commit history intact on `main`.

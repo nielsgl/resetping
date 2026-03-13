@@ -49,6 +49,12 @@ Before merge, PRs must pass `typecheck`, `build`, `cargo test`, `cargo fmt --che
   - Platforms validated (`macOS` required for v1; mention Windows/Linux checks when relevant).
   - Screenshots/GIFs for visible UI changes.
 
+## Git Merge Strategy
+- Merge pull requests into `main` using a merge commit (`--no-ff`).
+- In GitHub, use **Create a merge commit**.
+- Do not use squash merge or rebase merge for `main`.
+- Preserve branch commit history on `main`.
+
 ## Release & Security Standards
 - v1 release readiness must include macOS signing/notarization validation and publish Windows/Linux beta artifacts.
 - Do not commit secrets, certificates, tokens, or signing material; use CI-managed secrets only.
