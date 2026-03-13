@@ -27,13 +27,13 @@ ResetPing is a tray-first desktop notifier for Codex reset status. It polls `htt
 
 ## Roadmap notes
 
-- Update check command is currently a v1 stub and logs manual checks.
+- In-app updater is enabled for macOS v1 only.
+- Manual and background checks detect stable updates and defer installation until explicit user action.
 - Sentry telemetry is split by purpose:
   - `error_telemetry_enabled` (default `true`)
   - `usage_telemetry_enabled` (default `false`)
 - Anonymous `installation_id` is generated once and persisted locally.
 - Usage events include `app_open`, `heartbeat` (24h), `transition_detected`, and `update_check`.
-- Full signed updater integration is planned next hardening step.
 - On macOS, banner notifications may be suppressed while ResetPing is the active/focused app window. Tray-triggered/background notifications remain the most reliable visual path.
 
 ## Development
@@ -69,6 +69,41 @@ npm run typecheck
 npm run build
 cd src-tauri && cargo test && cargo fmt --check && cargo clippy -- -D warnings
 ```
+
+Pre-commit hooks (recommended):
+
+```bash
+# install pre-commit (choose one):
+#   brew install pre-commit
+#   pipx install pre-commit
+#   uv tool install pre-commit
+#     or one-shot usage: uvx pre-commit run --all-files
+npm run hooks:install
+```
+
+Hook coverage is stack-aware:
+- YAML/JSON/TOML parsing checks (`check-yaml`, `check-json`, `check-toml`)
+- GitHub Actions workflow lint (`actionlint`)
+- Rust format check on Rust file commits (`cargo fmt --check`)
+- Pre-push quality gate: `npm run typecheck`, `npm run test`, `cargo test`, `cargo clippy -- -D warnings`
+
+Run all hooks manually:
+
+```bash
+npm run hooks:run
+```
+
+Direct command alternatives:
+
+```bash
+pre-commit run --all-files
+pipx run pre-commit run --all-files
+uvx pre-commit run --all-files
+```
+
+Notes:
+- Contributors are not expected to use `uv`; any supported install path is fine.
+- CI remains the enforcement gate even if local hooks are skipped.
 
 ## Manual testing runbook
 
@@ -191,7 +226,12 @@ And these variables:
 
 - `CODESIGN_IDENTITY`
 - `NOTARY_PROFILE_NAME`
+- `TAURI_UPDATER_PUBLIC_KEY`
 
 ## License
 
 MIT
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for local setup, hook installation, and required checks.
