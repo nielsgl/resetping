@@ -120,6 +120,7 @@ app.innerHTML = `
           <button type="submit">Save Settings</button>
           <button id="check-updates" type="button">Check Updates</button>
           ${IS_DEV_BUILD ? '<button id="test-telemetry" type="button">Send Telemetry Test</button>' : ""}
+          ${IS_DEV_BUILD ? '<button id="test-ui-error" type="button">Send UI Error Test</button>' : ""}
           <button id="reset-endpoint" type="button">Reset Endpoint URL</button>
         </div>
       </form>
@@ -360,6 +361,16 @@ async function wireActions(): Promise<void> {
         });
         flashMessage(`Telemetry test failed: ${String(error)}`, "error");
       }
+    });
+
+    document.querySelector("#test-ui-error")?.addEventListener("click", () => {
+      const testError = new Error("ResetPing UI error test");
+      captureUiError(testError, {
+        action: "manual_ui_error_test",
+        errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+        installationId: currentState?.installation_id ?? undefined,
+      });
+      flashMessage("UI error test sent.", "success");
     });
   }
 
