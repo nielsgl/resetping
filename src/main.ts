@@ -4,6 +4,8 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "./styles.css";
 import { buildLogExport, formatTimestamp } from "./utils/time";
 
+const DEFAULT_ENDPOINT_URL = "https://hascodexratelimitreset.today/api/status";
+
 type NotificationPolicy = "flip" | "no_to_yes";
 
 type AppSettings = {
@@ -48,6 +50,9 @@ type AppStateResponse = {
 };
 
 let currentState: AppStateResponse | null = null;
+let messageTimerSettings: number | null = null;
+let messageTimerDiagnostics: number | null = null;
+let previousTransitionCount = 0;
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) {
@@ -108,9 +113,11 @@ app.innerHTML = `
         <div class="form-actions">
           <button type="submit">Save Settings</button>
           <button id="check-updates" type="button">Check Updates</button>
+          <button id="test-telemetry" type="button">Send Telemetry Test</button>
+          <button id="reset-endpoint" type="button">Reset Endpoint URL</button>
         </div>
       </form>
-      <p id="save-message" class="muted"></p>
+      <p id="save-message" class="status-message"></p>
     </section>
 
     <section class="panel split">
@@ -121,6 +128,7 @@ app.innerHTML = `
       <div>
         <h2>Diagnostics</h2>
         <button id="copy-logs" type="button">Copy Logs</button>
+        <p id="diagnostics-message" class="status-message status-inline"></p>
         <ul id="log-list" class="list logs"></ul>
       </div>
     </section>
@@ -207,6 +215,48 @@ function renderAll(state: AppStateResponse): void {
   setFormValues(state.settings);
   renderTransitions(state.transitions);
   renderLogs(state.logs);
+
+  if (state.transitions.length > previousTransitionCount && previousTransitionCount > 0) {
+    const newest = state.transitions[state.transitions.length - 1];
+    flashMessage(
+      `Transition detected: ${newest.from} -> ${newest.to}. If this window is focused, macOS may hide banners.`,
+      "info",
+      "save-message",
+    );
+  }
+  previousTransitionCount = state.transitions.length;
+}
+
+function flashMessage(
+  text: string,
+  type: "success" | "error" | "info" = "info",
+  targetId: "save-message" | "diagnostics-message" = "save-message",
+): void {
+  const message = document.querySelector<HTMLParagraphElement>(`#${targetId}`);
+  if (!message) return;
+
+  const extraClass = targetId === "diagnostics-message" ? " status-inline" : "";
+  message.className = `status-message status-${type}${extraClass} show`;
+  message.textContent = text;
+
+  if (targetId === "save-message") {
+    if (messageTimerSettings !== null) {
+      window.clearTimeout(messageTimerSettings);
+    }
+
+    messageTimerSettings = window.setTimeout(() => {
+      message.classList.remove("show");
+    }, 3200);
+    return;
+  }
+
+  if (messageTimerDiagnostics !== null) {
+    window.clearTimeout(messageTimerDiagnostics);
+  }
+
+  messageTimerDiagnostics = window.setTimeout(() => {
+    message.classList.remove("show");
+  }, 3200);
 }
 
 async function loadState(): Promise<void> {
@@ -216,16 +266,15 @@ async function loadState(): Promise<void> {
 
 async function saveSettings(event: SubmitEvent): Promise<void> {
   event.preventDefault();
-  const message = document.querySelector<HTMLParagraphElement>("#save-message");
   try {
     const saved = await invoke<AppSettings>("update_settings", { settings: readSettingsFromForm() });
     if (currentState) {
       currentState.settings = saved;
     }
-    message!.textContent = "Settings saved.";
+    flashMessage("Settings saved.", "success");
     await loadState();
   } catch (error) {
-    message!.textContent = `Failed to save settings: ${String(error)}`;
+    flashMessage(`Failed to save settings: ${String(error)}`, "error");
   }
 }
 
@@ -240,25 +289,47 @@ async function wireActions(): Promise<void> {
   });
 
   document.querySelector("#test-notification")?.addEventListener("click", async () => {
-    await invoke("send_test_notification_cmd");
+    try {
+      await invoke("send_test_notification_cmd");
+      flashMessage(
+        "Notification dispatched. If this window is focused, macOS may suppress the banner.",
+        "info",
+      );
+    } catch (error) {
+      flashMessage(`Failed to dispatch test notification: ${String(error)}`, "error");
+    }
   });
 
   document.querySelector("#check-updates")?.addEventListener("click", async () => {
     const response = await invoke<{ result: string }>("check_for_updates");
-    const message = document.querySelector<HTMLParagraphElement>("#save-message");
-    message!.textContent = response.result;
+    flashMessage(response.result, "info");
     await loadState();
   });
 
+  document.querySelector("#test-telemetry")?.addEventListener("click", async () => {
+    try {
+      const eventId = await invoke<string>("send_test_telemetry_event");
+      flashMessage(`Telemetry event sent. Event ID: ${eventId}`, "success");
+    } catch (error) {
+      flashMessage(`Telemetry test failed: ${String(error)}`, "error");
+    }
+  });
+
+  document.querySelector("#reset-endpoint")?.addEventListener("click", () => {
+    const endpointInput = document.querySelector<HTMLInputElement>("#status_endpoint_url");
+    if (!endpointInput) return;
+    endpointInput.value = DEFAULT_ENDPOINT_URL;
+    flashMessage("Endpoint reset. Click Save Settings to persist.", "info");
+  });
+
   document.querySelector("#copy-logs")?.addEventListener("click", async () => {
-    const message = document.querySelector<HTMLParagraphElement>("#save-message");
     try {
       const logs = await invoke<LogEntry[]>("get_recent_logs");
       const text = buildLogExport(logs);
       await writeText(text);
-      message!.textContent = "Copied logs to clipboard.";
+      flashMessage("Copied logs to clipboard.", "success", "diagnostics-message");
     } catch (error) {
-      message!.textContent = `Failed to copy logs: ${String(error)}`;
+      flashMessage(`Failed to copy logs: ${String(error)}`, "error", "diagnostics-message");
     }
   });
 

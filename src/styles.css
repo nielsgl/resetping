@@ -172,6 +172,43 @@ button:hover {
   font-size: 0.82rem;
 }
 
+.status-message {
+  min-height: 1.3rem;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.status-inline {
+  margin: 8px 0 10px;
+}
+
+.status-message.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.status-success {
+  background: #e4f6ed;
+  color: #185d3f;
+  border: 1px solid #b8e5cc;
+}
+
+.status-error {
+  background: #fbe9e8;
+  color: #7d1d1a;
+  border: 1px solid #f1c4c2;
+}
+
+.status-info {
+  background: #e7eff8;
+  color: #18405f;
+  border: 1px solid #c1d9ee;
+}
+
 @media (max-width: 760px) {
   .split {
     grid-template-columns: 1fr;
