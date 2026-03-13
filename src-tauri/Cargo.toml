@@ -1,0 +1,26 @@
+[package]
+name = "resetping"
+version = "0.1.0"
+description = "ResetPing - Codex reset notifier"
+authors = ["niels.van.Galen.last"]
+edition = "2021"
+
+[lib]
+name = "resetping_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rand = "0.8"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-clipboard-manager = "2"
+tokio = { version = "1", features = ["time"] }
+sentry = "0.45"
