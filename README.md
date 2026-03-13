@@ -28,7 +28,11 @@ ResetPing is a tray-first desktop notifier for Codex reset status. It polls `htt
 ## Roadmap notes
 
 - Update check command is currently a v1 stub and logs manual checks.
-- Sentry telemetry is env-driven (`SENTRY_DSN`) and currently limited to startup marker + polling errors.
+- Sentry telemetry is split by purpose:
+  - `error_telemetry_enabled` (default `true`)
+  - `usage_telemetry_enabled` (default `false`)
+- Anonymous `installation_id` is generated once and persisted locally.
+- Usage events include `app_open`, `heartbeat` (24h), `transition_detected`, and `update_check`.
 - Full signed updater integration is planned next hardening step.
 - On macOS, banner notifications may be suppressed while ResetPing is the active/focused app window. Tray-triggered/background notifications remain the most reliable visual path.
 
@@ -121,7 +125,8 @@ SENTRY_DSN='https://<key>@<org>.ingest.sentry.io/<project>' npm run tauri dev
 2. Force polling error by setting invalid endpoint, then refresh.
 3. In Sentry, expect:
 - startup info event (`ResetPing telemetry initialized`)
-- error event(s) for polling failures.
+- error event(s) for polling failures when error telemetry is enabled.
+- usage events (`app_open`, `heartbeat`) when usage analytics is enabled.
 
 ## Settings model
 
@@ -136,7 +141,24 @@ The app persists these settings:
 - `update_checks_enabled` (default `false`)
 - `update_check_interval_hours` (default `24`)
 - `status_endpoint_url` (default production endpoint)
-- `telemetry_enabled` (default `true`; telemetry backend wiring pending)
+- `error_telemetry_enabled` (default `true`)
+- `usage_telemetry_enabled` (default `false`)
+
+## Install metrics snapshots
+
+Capture GitHub release download metrics locally:
+
+```bash
+GITHUB_REPOSITORY=<owner>/<repo> GITHUB_TOKEN=<token> npm run metrics:installs
+```
+
+Automated snapshots run daily via `.github/workflows/daily-install-snapshot.yml` and write to:
+
+- `ops/metrics/install_snapshots.json`
+
+See telemetry/data constraints in:
+
+- `docs/TELEMETRY_POLICY.md`
 
 ## Packaging and release
 
