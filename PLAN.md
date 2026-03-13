@@ -1,3 +1,127 @@
+# ResetPing v1 Plan + Delivery Ledger
+
+## How to Use This File
+- This is the single source of truth for what was planned, what shipped, and what is still open.
+- Top sections are operational (`status`, `next actions`, `evidence`).
+- The original plan is preserved verbatim in **Appendix A** so no information is lost.
+
+## Plan Update Protocol (Mandatory)
+- Every status-changing implementation PR must update this file in the same PR.
+- The update is not optional. If status changed and this file was not updated, the PR is incomplete.
+- `Appendix A` is immutable historical context. Do not delete it. Do not rewrite it. Only append below it if needed.
+- Allowed status values are exactly: `DONE`, `PARTIAL`, `PENDING`, `DEFERRED`, `BLOCKED`.
+- `Current Status Snapshot`, `Delivery Ledger`, and `Final Release Gate Checklist` must stay logically consistent with each other.
+- Every status change must include an entry in `Plan Status Changelog` (below).
+- For each `PENDING` or `BLOCKED` item, include one explicit next action in `Next Actions (Priority Order)`.
+
+## Plan Status Changelog
+- Entry format (single line, required fields in this exact order):
+  - `YYYY-MM-DD | actor=<human-or-agent> | sections=<comma-separated-section-names> | change=<status transition(s)> | reason=<why this changed> | evidence=<path(s)>`
+- Rules:
+  - Use absolute dates.
+  - Do not delete prior entries.
+  - Newest entry goes at the top.
+  - `evidence` must reference concrete repository paths when code/docs/workflow changed.
+
+- 2026-03-13 | actor=codex | sections=Current Status Snapshot,Delivery Ledger,Final Release Gate Checklist | change=initialized living ledger from original static plan | reason=make execution status explicit without losing plan detail | evidence=/Users/niels.van.Galen.last/code/codex-reset-notifier/PLAN.md
+
+## Current Status Snapshot
+- Product target: `ResetPing` tray app for Codex reset status polling + notifications.
+- Current implementation state: **core product complete**, **updater implementation complete**, **release/ops validation partially complete**.
+- Delivery posture:
+  - `DONE`: core polling/state machine/tray/settings/notifications/diagnostics/telemetry/install-metrics snapshot pipeline.
+  - `PENDING`: release hardening and final manual QA gates.
+  - `DEFERRED`: Homebrew cask follow-up (explicitly outside v1 ship gate).
+
+## Delivery Ledger
+
+### Workstream 1: Core App Runtime
+- Status: `DONE`
+- Includes:
+  - Tauri tray-first runtime, state machine, persistence, transitions, degraded health behavior.
+  - Polling scheduler with low-power cadence + jitter.
+  - Notification policies (`flip`, `no_to_yes`) + initial-state notification.
+  - Endpoint override and diagnostics log export.
+- Evidence:
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
+
+### Workstream 2: Security/Correctness Hardening
+- Status: `DONE`
+- Includes:
+  - Non-2xx upstream responses treated as poll failures (no false healthy state).
+  - Safe diagnostics rendering (no raw `innerHTML` log interpolation).
+  - Transactional settings behavior around autostart/persistence.
+  - Form dirty-state protection against background state refresh overwrite.
+- Evidence:
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
+
+### Workstream 3: Updater Implementation
+- Status: `DONE` (implementation)
+- Includes:
+  - Real updater check flow (replaced v1 stub command).
+  - Pending update state + explicit install action (`download_and_install`).
+  - Scheduled update checks driven by settings.
+  - UI install button shown only when update is ready.
+  - Updater artifacts/signatures configured for release workflow.
+- Evidence:
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/utils/updater.ts`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/tauri.conf.json`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/.github/workflows/release.yml`
+
+### Workstream 4: Telemetry + Install Analytics
+- Status: `DONE`
+- Includes:
+  - Split telemetry toggles (`error_telemetry_enabled`, `usage_telemetry_enabled`).
+  - Anonymous persistent `installation_id`.
+  - Usage events (`app_open`, heartbeat, transition, update_check).
+  - Frontend + backend Sentry integration.
+  - Poll failure telemetry throttling to prevent event floods.
+  - Daily GitHub release download snapshot pipeline.
+- Evidence:
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/docs/TELEMETRY_POLICY.md`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/.github/workflows/daily-install-snapshot.yml`
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/scripts/snapshot-release-downloads.mjs`
+
+### Workstream 5: Release + Distribution Operations
+- Status: `PARTIAL`
+- Done:
+  - Cross-platform build/release workflows exist.
+  - macOS signing/notarization steps and updater artifact checks exist in workflow.
+- Pending to close v1 gate:
+  - Confirm CI secrets/vars are configured in GitHub environment.
+  - Run real signed/notarized release and verify Gatekeeper-friendly install path on device.
+  - Run full updater E2E from published release.
+- Evidence:
+  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/.github/workflows/release.yml`
+
+## Deferred / Out of Scope (Explicit)
+- Homebrew cask packaging follow-up.
+- App-store distribution path.
+
+## Final Release Gate Checklist
+- `PENDING` Release pipeline executed successfully with real signing/notarization credentials.
+- `PENDING` macOS signed install smoke test (fresh machine profile).
+- `PENDING` Launch-at-login manual verification matrix (enable/disable + reboot).
+- `PENDING` Updater E2E verification (`check -> install -> restart`) on published artifact.
+- `PENDING` Cross-platform beta tray/notification parity checks (Windows/Linux).
+- `DONE` Automated checks (`npm test/typecheck/build`, `cargo fmt/clippy/test`) on current branch.
+
+## Next Actions (Priority Order)
+1. Run one full release dry-run in GitHub Actions with real secrets and verify notarization + stapling output.
+2. Validate updater E2E from published `latest.json` + signed artifacts on macOS.
+3. Execute manual QA checklist and capture pass/fail evidence in `RELEASE_CHECKLIST.md`.
+4. After gates pass, cut/tag v1 release and publish release notes.
+
+---
+
+## Appendix A: Original Plan (Verbatim, Preserved)
+
 # Plan: ResetPing (Codex Reset Notifier) v1
 
 ## Summary

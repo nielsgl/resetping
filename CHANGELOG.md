@@ -1,0 +1,31 @@
+# Changelog
+
+All notable user-facing changes to this project are documented in this file.
+
+Format rules:
+- Keep entries under `Unreleased` until a release is cut.
+- Use these sections only: `Added`, `Changed`, `Fixed`, `Security`.
+- Write entries in user-facing language.
+- Do not remove historical entries.
+
+## [Unreleased]
+
+### Added
+- Tray-first desktop app that polls Codex reset status and sends native notifications on status changes.
+- Settings window with polling controls, notification policy, endpoint override, diagnostics log copy, and launch-at-login toggle.
+- In-app updater flow on macOS: manual/scheduled checks, update availability state, and install action.
+- Daily GitHub release download snapshot automation for install-trend reporting.
+
+### Changed
+- Telemetry model split into independent toggles for crash/error telemetry and usage analytics.
+- Added anonymous persistent installation identifier for coarse active-usage metrics.
+- Added backend transport diagnostics and fallback path for resilient polling under specific macOS socket failures.
+
+### Fixed
+- Non-2xx upstream API responses now count as poll failures and correctly affect degraded health state.
+- Diagnostics/transitions rendering now escapes content safely (no raw HTML interpolation).
+- Settings update behavior is transactional around autostart/persistence failure paths.
+- In-progress settings form edits are preserved during background state refresh events.
+
+### Security
+- Hardened diagnostics rendering against endpoint-controlled content injection.

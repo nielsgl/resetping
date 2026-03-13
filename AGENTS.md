@@ -64,3 +64,32 @@ Before merge, PRs must pass `typecheck`, `build`, `cargo test`, `cargo fmt --che
 - ResetPing is privacy-first: telemetry must remain minimal, anonymous, and user-opt-out.
 - No feature analytics or behavioral tracking is allowed.
 - Any new telemetry/error event must document fields, purpose, and sampling/trigger behavior in the PR.
+
+## Plan And Changelog Maintenance (Mandatory)
+- This repository uses two different logs with different purposes:
+  - `PLAN.md`: engineering execution status and gate tracking.
+  - `CHANGELOG.md`: end-user release notes.
+- Any PR that changes delivery status must update `PLAN.md` in the same PR.
+- Any PR with user-visible behavior changes must update `CHANGELOG.md` under `Unreleased`.
+- Do not merge status-changing work without both updates.
+
+### Exact `PLAN.md` Update Requirements
+- Update all three sections when applicable:
+  - `Current Status Snapshot`
+  - `Delivery Ledger`
+  - `Final Release Gate Checklist`
+- Add one line to `Plan Status Changelog` for every status transition.
+- Use only these status tokens: `DONE`, `PARTIAL`, `PENDING`, `DEFERRED`, `BLOCKED`.
+- Keep `Appendix A` intact and verbatim. Never delete it. Never rewrite historical content.
+- If an item is `PENDING` or `BLOCKED`, add an explicit next step in `Next Actions (Priority Order)`.
+
+### Exact `CHANGELOG.md` Update Requirements
+- Use the `Unreleased` section only for in-flight changes.
+- Place entries under one of: `Added`, `Changed`, `Fixed`, `Security`.
+- Entries must be user-facing, concise, and behavior-oriented (not implementation internals).
+- Move `Unreleased` entries into a versioned section only when cutting a release tag.
+
+### Pull Request Checklist (Required)
+- `PLAN.md` updated (if delivery/status/gates changed).
+- `CHANGELOG.md` updated (if user-visible behavior changed).
+- Validation commands listed in PR description with pass/fail outcome.
