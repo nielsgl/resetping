@@ -150,8 +150,6 @@ struct NormalizedStatus {
     fetched_at_ms: u64,
     configured: bool,
     transport: FetchTransport,
-    source_http_status: u16,
-    source_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -583,6 +581,16 @@ async fn fetch_status(settings: &AppSettings) -> Result<NormalizedStatus, String
         }
     })?;
 
+    if !status.is_success() {
+        let upstream = payload
+            .error
+            .as_deref()
+            .unwrap_or("no upstream error message");
+        return Err(format!(
+            "request failed with status {status}; upstream_error={upstream}"
+        ));
+    }
+
     let effective_state = if payload.state == "no" { "no" } else { "yes" };
 
     Ok(NormalizedStatus {
@@ -591,8 +599,6 @@ async fn fetch_status(settings: &AppSettings) -> Result<NormalizedStatus, String
         fetched_at_ms: now_ms(),
         configured: payload.configured,
         transport: FetchTransport::Reqwest,
-        source_http_status: status.as_u16(),
-        source_error: payload.error,
     })
 }
 
@@ -641,6 +647,15 @@ async fn fetch_status_via_curl(settings: &AppSettings) -> Result<NormalizedStatu
 
     let payload: StatusApiPayload = serde_json::from_str(body)
         .map_err(|e| format!("curl fallback invalid response body: {e:#} (debug: {e:?})"))?;
+    if status_code >= 400 {
+        let upstream = payload
+            .error
+            .as_deref()
+            .unwrap_or("no upstream error message");
+        return Err(format!(
+            "request failed with status {status_code}; upstream_error={upstream}"
+        ));
+    }
     let effective_state = if payload.state == "no" { "no" } else { "yes" };
 
     Ok(NormalizedStatus {
@@ -649,8 +664,6 @@ async fn fetch_status_via_curl(settings: &AppSettings) -> Result<NormalizedStatu
         fetched_at_ms: now_ms(),
         configured: payload.configured,
         transport: FetchTransport::CurlFallback,
-        source_http_status: status_code,
-        source_error: payload.error,
     })
 }
 
@@ -751,20 +764,6 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
                     );
                 } else {
                     push_log(&mut guard, "info", "Polling succeeded via reqwest");
-                }
-                if status.source_http_status >= 400 {
-                    let upstream = status
-                        .source_error
-                        .as_deref()
-                        .unwrap_or("no upstream error message");
-                    push_log(
-                        &mut guard,
-                        "warn",
-                        format!(
-                            "Upstream returned HTTP {} but provided status payload ({upstream})",
-                            status.source_http_status
-                        ),
-                    );
                 }
 
                 let previous = guard.snapshot.last_known_state.clone();
@@ -1047,6 +1046,29 @@ fn update_settings(
 ) -> Result<AppSettings, String> {
     let settings = sanitize_settings(settings);
     let any_telemetry_enabled = telemetry_enabled(&settings);
+    let previous_settings = {
+        let guard = state.inner.lock().unwrap();
+        guard.settings.clone()
+    };
+
+    if settings.launch_at_login != previous_settings.launch_at_login {
+        if let Err(err) = set_autostart(&app, settings.launch_at_login) {
+            if settings.error_telemetry_enabled {
+                let installation_id = {
+                    let guard = state.inner.lock().unwrap();
+                    guard.installation_id.clone()
+                };
+                capture_telemetry_error(
+                    &settings,
+                    &installation_id,
+                    &format!("Autostart update failed: {err}"),
+                    "autostart",
+                    "update_failed",
+                );
+            }
+            return Err(err);
+        }
+    }
 
     {
         let mut guard = state.inner.lock().unwrap();
@@ -1054,6 +1076,17 @@ fn update_settings(
         push_log(&mut guard, "info", "Settings updated");
         emit_state_changed(&app, &guard);
         if let Err(err) = save_persistent(&app, &guard) {
+            guard.settings = previous_settings.clone();
+            push_log(
+                &mut guard,
+                "warn",
+                "Settings change rolled back after persistence failure",
+            );
+            emit_state_changed(&app, &guard);
+            let _ = save_persistent(&app, &guard);
+            if settings.launch_at_login != previous_settings.launch_at_login {
+                let _ = set_autostart(&app, previous_settings.launch_at_login);
+            }
             if guard.settings.error_telemetry_enabled {
                 capture_telemetry_error(
                     &guard.settings,
@@ -1065,23 +1098,6 @@ fn update_settings(
             }
             return Err(err);
         }
-    }
-
-    if let Err(err) = set_autostart(&app, settings.launch_at_login) {
-        if settings.error_telemetry_enabled {
-            let installation_id = {
-                let guard = state.inner.lock().unwrap();
-                guard.installation_id.clone()
-            };
-            capture_telemetry_error(
-                &settings,
-                &installation_id,
-                &format!("Autostart update failed: {err}"),
-                "autostart",
-                "update_failed",
-            );
-        }
-        return Err(err);
     }
     let dsn = {
         let guard = state.inner.lock().unwrap();
