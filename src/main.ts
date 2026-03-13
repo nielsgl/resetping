@@ -5,6 +5,7 @@ import "./styles.css";
 import { buildLogExport, formatTimestamp } from "./utils/time";
 
 const DEFAULT_ENDPOINT_URL = "https://hascodexratelimitreset.today/api/status";
+const IS_DEV_BUILD = import.meta.env.DEV;
 
 type NotificationPolicy = "flip" | "no_to_yes";
 
@@ -113,7 +114,7 @@ app.innerHTML = `
         <div class="form-actions">
           <button type="submit">Save Settings</button>
           <button id="check-updates" type="button">Check Updates</button>
-          <button id="test-telemetry" type="button">Send Telemetry Test</button>
+          ${IS_DEV_BUILD ? '<button id="test-telemetry" type="button">Send Telemetry Test</button>' : ""}
           <button id="reset-endpoint" type="button">Reset Endpoint URL</button>
         </div>
       </form>
@@ -306,14 +307,16 @@ async function wireActions(): Promise<void> {
     await loadState();
   });
 
-  document.querySelector("#test-telemetry")?.addEventListener("click", async () => {
-    try {
-      const eventId = await invoke<string>("send_test_telemetry_event");
-      flashMessage(`Telemetry event sent. Event ID: ${eventId}`, "success");
-    } catch (error) {
-      flashMessage(`Telemetry test failed: ${String(error)}`, "error");
-    }
-  });
+  if (IS_DEV_BUILD) {
+    document.querySelector("#test-telemetry")?.addEventListener("click", async () => {
+      try {
+        const eventId = await invoke<string>("send_test_telemetry_event");
+        flashMessage(`Telemetry event sent. Event ID: ${eventId}`, "success");
+      } catch (error) {
+        flashMessage(`Telemetry test failed: ${String(error)}`, "error");
+      }
+    });
+  }
 
   document.querySelector("#reset-endpoint")?.addEventListener("click", () => {
     const endpointInput = document.querySelector<HTMLInputElement>("#status_endpoint_url");
