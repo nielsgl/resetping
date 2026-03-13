@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "mock:status": "node scripts/mock-status-server.mjs",
-    "metrics:installs": "node scripts/snapshot-release-downloads.mjs"
+    "metrics:installs": "node scripts/snapshot-release-downloads.mjs",
+    "hooks:install": "pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push",
+    "hooks:run": "pre-commit run --all-files"
   },
   "dependencies": {
     "@sentry/browser": "^10.11.0",
