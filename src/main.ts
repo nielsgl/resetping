@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "./styles.css";
+import { captureUiError, initFrontendTelemetry } from "./utils/telemetry";
 import { buildLogExport, formatTimestamp } from "./utils/time";
 
 const DEFAULT_ENDPOINT_URL = "https://hascodexratelimitreset.today/api/status";
@@ -19,7 +20,8 @@ type AppSettings = {
   update_checks_enabled: boolean;
   update_check_interval_hours: number;
   status_endpoint_url: string;
-  telemetry_enabled: boolean;
+  error_telemetry_enabled: boolean;
+  usage_telemetry_enabled: boolean;
 };
 
 type RuntimeSnapshot = {
@@ -48,6 +50,8 @@ type AppStateResponse = {
   transitions: TransitionEntry[];
   logs: LogEntry[];
   health: string;
+  installation_id: string;
+  frontend_telemetry_dsn: string | null;
 };
 
 let currentState: AppStateResponse | null = null;
@@ -109,7 +113,8 @@ app.innerHTML = `
         <label class="checkbox-row"><input type="checkbox" id="notify_initial_state" /> Notify initial state</label>
         <label class="checkbox-row"><input type="checkbox" id="launch_at_login" /> Launch at login</label>
         <label class="checkbox-row"><input type="checkbox" id="update_checks_enabled" /> Enable background update checks</label>
-        <label class="checkbox-row"><input type="checkbox" id="telemetry_enabled" /> Enable anonymous crash/error telemetry</label>
+        <label class="checkbox-row"><input type="checkbox" id="error_telemetry_enabled" /> Enable anonymous crash/error telemetry</label>
+        <label class="checkbox-row"><input type="checkbox" id="usage_telemetry_enabled" /> Enable anonymous usage analytics</label>
 
         <div class="form-actions">
           <button type="submit">Save Settings</button>
@@ -187,7 +192,8 @@ function setFormValues(settings: AppSettings): void {
   (document.querySelector("#update_checks_enabled") as HTMLInputElement).checked = settings.update_checks_enabled;
   (document.querySelector("#update_check_interval_hours") as HTMLInputElement).value = String(settings.update_check_interval_hours);
   (document.querySelector("#status_endpoint_url") as HTMLInputElement).value = settings.status_endpoint_url;
-  (document.querySelector("#telemetry_enabled") as HTMLInputElement).checked = settings.telemetry_enabled;
+  (document.querySelector("#error_telemetry_enabled") as HTMLInputElement).checked = settings.error_telemetry_enabled;
+  (document.querySelector("#usage_telemetry_enabled") as HTMLInputElement).checked = settings.usage_telemetry_enabled;
 }
 
 function readSettingsFromForm(): AppSettings {
@@ -206,11 +212,17 @@ function readSettingsFromForm(): AppSettings {
       (document.querySelector("#update_check_interval_hours") as HTMLInputElement).value,
     ),
     status_endpoint_url: (document.querySelector("#status_endpoint_url") as HTMLInputElement).value,
-    telemetry_enabled: (document.querySelector("#telemetry_enabled") as HTMLInputElement).checked,
+    error_telemetry_enabled: (document.querySelector("#error_telemetry_enabled") as HTMLInputElement).checked,
+    usage_telemetry_enabled: (document.querySelector("#usage_telemetry_enabled") as HTMLInputElement).checked,
   };
 }
 
 function renderAll(state: AppStateResponse): void {
+  initFrontendTelemetry({
+    dsn: state.frontend_telemetry_dsn ?? undefined,
+    installationId: state.installation_id,
+    errorTelemetryEnabled: state.settings.error_telemetry_enabled,
+  });
   currentState = state;
   setStatusCards(state.snapshot, state.health);
   setFormValues(state.settings);
@@ -275,6 +287,11 @@ async function saveSettings(event: SubmitEvent): Promise<void> {
     flashMessage("Settings saved.", "success");
     await loadState();
   } catch (error) {
+    captureUiError(error, {
+      action: "save_settings_failed",
+      errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+      installationId: currentState?.installation_id ?? undefined,
+    });
     flashMessage(`Failed to save settings: ${String(error)}`, "error");
   }
 }
@@ -285,8 +302,17 @@ async function wireActions(): Promise<void> {
   });
 
   document.querySelector("#refresh-now")?.addEventListener("click", async () => {
-    await invoke("manual_refresh");
-    await loadState();
+    try {
+      await invoke("manual_refresh");
+      await loadState();
+    } catch (error) {
+      captureUiError(error, {
+        action: "manual_refresh_failed",
+        errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+        installationId: currentState?.installation_id ?? undefined,
+      });
+      flashMessage(`Refresh failed: ${String(error)}`, "error");
+    }
   });
 
   document.querySelector("#test-notification")?.addEventListener("click", async () => {
@@ -297,14 +323,28 @@ async function wireActions(): Promise<void> {
         "info",
       );
     } catch (error) {
+      captureUiError(error, {
+        action: "test_notification_failed",
+        errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+        installationId: currentState?.installation_id ?? undefined,
+      });
       flashMessage(`Failed to dispatch test notification: ${String(error)}`, "error");
     }
   });
 
   document.querySelector("#check-updates")?.addEventListener("click", async () => {
-    const response = await invoke<{ result: string }>("check_for_updates");
-    flashMessage(response.result, "info");
-    await loadState();
+    try {
+      const response = await invoke<{ result: string }>("check_for_updates");
+      flashMessage(response.result, "info");
+      await loadState();
+    } catch (error) {
+      captureUiError(error, {
+        action: "check_updates_failed",
+        errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+        installationId: currentState?.installation_id ?? undefined,
+      });
+      flashMessage(`Update check failed: ${String(error)}`, "error");
+    }
   });
 
   if (IS_DEV_BUILD) {
@@ -313,6 +353,11 @@ async function wireActions(): Promise<void> {
         const eventId = await invoke<string>("send_test_telemetry_event");
         flashMessage(`Telemetry event sent. Event ID: ${eventId}`, "success");
       } catch (error) {
+        captureUiError(error, {
+          action: "telemetry_test_failed",
+          errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+          installationId: currentState?.installation_id ?? undefined,
+        });
         flashMessage(`Telemetry test failed: ${String(error)}`, "error");
       }
     });
@@ -332,6 +377,11 @@ async function wireActions(): Promise<void> {
       await writeText(text);
       flashMessage("Copied logs to clipboard.", "success", "diagnostics-message");
     } catch (error) {
+      captureUiError(error, {
+        action: "copy_logs_failed",
+        errorTelemetryEnabled: currentState?.settings.error_telemetry_enabled ?? false,
+        installationId: currentState?.installation_id ?? undefined,
+      });
       flashMessage(`Failed to copy logs: ${String(error)}`, "error", "diagnostics-message");
     }
   });
