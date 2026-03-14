@@ -42,6 +42,10 @@
   },
   "plugins": {
     "updater": {
+      "pubkey": "$TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/nielsgl/resetping/releases/latest/download/latest.json"
+      ],
       "windows": {
         "installMode": "passive"
       }

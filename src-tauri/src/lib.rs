@@ -10,10 +10,12 @@ use std::{
 use rand::RngExt as _;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    ActivationPolicy, AppHandle, Emitter, Manager, State,
+    AppHandle, Emitter, Manager, State,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt as _;
