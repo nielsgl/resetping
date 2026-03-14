@@ -30,3 +30,6 @@ src-tauri/.env.*
 *.njsproj
 *.sln
 *.sw?
+
+# Local personal tooling (intentionally not versioned)
+local/

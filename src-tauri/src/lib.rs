@@ -23,8 +23,8 @@ use tokio::time::sleep;
 
 const DEFAULT_ENDPOINT: &str = "https://hascodexratelimitreset.today/api/status";
 const DEFAULT_UPDATER_ENDPOINT: &str =
-    "https://github.com/niels-vg/codex-reset-notifier/releases/latest/download/latest.json";
-const APP_USER_AGENT: &str = "ResetPing/0.1.0 (+https://github.com/niels-vg/codex-reset-notifier)";
+    "https://github.com/nielsgl/resetping/releases/latest/download/latest.json";
+const APP_USER_AGENT: &str = "ResetPing/0.1.0 (+https://github.com/nielsgl/resetping)";
 const STATE_FILE: &str = "state.json";
 const TRANSITIONS_LIMIT: usize = 100;
 const LOG_LIMIT: usize = 200;
