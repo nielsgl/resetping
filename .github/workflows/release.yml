@@ -2,6 +2,12 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      free_mode:
+        description: "Skip Apple Developer signing/notarization steps"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -29,6 +35,7 @@ jobs:
         run: npm ci
 
       - name: Import signing certificate
+        if: ${{ !inputs.free_mode }}
         env:
           APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -45,6 +52,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
 
       - name: Configure notary credentials
+        if: ${{ !inputs.free_mode }}
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
@@ -74,6 +82,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/resetping.key")"
           npm run tauri -- build --bundles app,dmg
 
+      - name: Ad-hoc sign app bundle (free mode)
+        if: ${{ inputs.free_mode }}
+        run: |
+          set -euo pipefail
+          APP_PATH="src-tauri/target/release/bundle/macos/ResetPing.app"
+          test -d "$APP_PATH"
+          /usr/bin/codesign --force --deep --sign - "$APP_PATH"
+
       - name: Verify updater artifacts
         run: |
           set -euo pipefail
@@ -83,6 +99,7 @@ jobs:
           test -n "$(find src-tauri/target/release/bundle -name '*.sig' -print -quit)"
 
       - name: Notarize and staple
+        if: ${{ !inputs.free_mode }}
         run: |
           set -euo pipefail
           ditto -c -k --keepParent "src-tauri/target/release/bundle/macos/ResetPing.app" ResetPing.zip
@@ -218,6 +235,9 @@ jobs:
   publish:
     needs: [build_macos, build_windows, build_linux]
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -236,7 +256,9 @@ jobs:
           print(data['version'])
           PY
           )
+          TAG="v${VERSION}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         env:
@@ -282,3 +304,73 @@ jobs:
             --title "ResetPing $TAG" \
             --notes "ResetPing release $TAG" \
             "${FILES[@]}"
+
+  update_homebrew_tap:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.publish.outputs.tag }}
+      VERSION: ${{ needs.publish.outputs.version }}
+      TAP_REPO: nielsgl/homebrew-tap
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_PAT }}
+          path: tap
+
+      - name: Resolve macOS DMG asset and checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ASSET_NAME="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.assets[] | select(.name | endswith(".dmg")) | .name' | head -n1)"
+          if [ -z "$ASSET_NAME" ]; then
+            echo "No .dmg asset found for ${TAG}"
+            exit 1
+          fi
+          ASSET_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET_NAME}"
+          curl -fL "$ASSET_URL" -o /tmp/resetping.dmg
+          SHA256="$(sha256sum /tmp/resetping.dmg | awk '{print $1}')"
+          echo "ASSET_NAME=$ASSET_NAME" >> "$GITHUB_ENV"
+          echo "ASSET_URL=$ASSET_URL" >> "$GITHUB_ENV"
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+
+      - name: Update cask file
+        run: |
+          set -euo pipefail
+          mkdir -p tap/Casks
+          cat > tap/Casks/resetping.rb <<EOF
+          cask "resetping" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "${ASSET_URL}",
+                verified: "github.com/nielsgl/resetping/"
+            name "ResetPing"
+            desc "Tray notifier for Codex rate limit reset status"
+            homepage "https://github.com/nielsgl/resetping"
+
+            depends_on arch: :arm64
+            depends_on macos: ">= :monterey"
+
+            app "ResetPing.app"
+          end
+          EOF
+
+      - name: Commit and push tap update
+        working-directory: tap
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- Casks/resetping.rb; then
+            echo "No cask changes to commit."
+            exit 0
+          fi
+          git add Casks/resetping.rb
+          git commit -m "chore(cask): update resetping ${VERSION}"
+          git push origin HEAD:main
