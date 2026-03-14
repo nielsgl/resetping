@@ -469,7 +469,14 @@ fn build_status_line(snapshot: &RuntimeSnapshot) -> String {
 
 fn resolve_sentry_dsn() -> Option<String> {
     let _ = dotenvy::dotenv();
-    std::env::var("SENTRY_DSN").ok()
+    std::env::var("SENTRY_DSN")
+        .ok()
+        .filter(|dsn| !dsn.trim().is_empty())
+        .or_else(|| {
+            option_env!("SENTRY_DSN")
+                .map(str::to_string)
+                .filter(|dsn| !dsn.trim().is_empty())
+        })
 }
 
 fn init_telemetry(enabled: bool, dsn: Option<&str>) {

@@ -292,6 +292,7 @@ Required secrets for free mode:
 - `TAURI_SIGNING_PRIVATE_KEY_B64`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 - `HOMEBREW_TAP_PAT` (fine-grained PAT with write access to `nielsgl/homebrew-tap`)
+- `SENTRY_DSN` (optional, recommended if you want telemetry in packaged builds)
 
 Required variables for free mode:
 
