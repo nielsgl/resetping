@@ -38,6 +38,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          shared-key: ${{ runner.os }}-${{ runner.arch }}-src-tauri
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
