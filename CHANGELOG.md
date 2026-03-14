@@ -10,6 +10,11 @@ Format rules:
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-03-14
+
+### Changed
+- Packaged release builds now include configured Sentry DSN from GitHub Actions secret so telemetry works in installed app builds.
+
 ## [0.1.2] - 2026-03-14
 
 ### Added
