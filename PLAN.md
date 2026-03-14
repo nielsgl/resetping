@@ -23,7 +23,9 @@
   - Newest entry goes at the top.
   - `evidence` must reference concrete repository paths when code/docs/workflow changed.
 
-- 2026-03-13 | actor=codex | sections=Current Status Snapshot,Delivery Ledger,Final Release Gate Checklist | change=initialized living ledger from original static plan | reason=make execution status explicit without losing plan detail | evidence=/Users/niels.van.Galen.last/code/codex-reset-notifier/PLAN.md
+- 2026-03-14 | actor=codex | sections=Plan Status Changelog,Delivery Ledger evidence paths | change=normalized evidence paths to repo-relative and aligned docs after workspace rename to resetping | reason=remove machine-specific absolute paths that break portability/readability | evidence=PLAN.md
+
+- 2026-03-13 | actor=codex | sections=Current Status Snapshot,Delivery Ledger,Final Release Gate Checklist | change=initialized living ledger from original static plan | reason=make execution status explicit without losing plan detail | evidence=PLAN.md
 
 ## Current Status Snapshot
 - Product target: `ResetPing` tray app for Codex reset status polling + notifications.
@@ -43,8 +45,8 @@
   - Notification policies (`flip`, `no_to_yes`) + initial-state notification.
   - Endpoint override and diagnostics log export.
 - Evidence:
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
+  - `src-tauri/src/lib.rs`
+  - `src/main.ts`
 
 ### Workstream 2: Security/Correctness Hardening
 - Status: `DONE`
@@ -54,8 +56,8 @@
   - Transactional settings behavior around autostart/persistence.
   - Form dirty-state protection against background state refresh overwrite.
 - Evidence:
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
+  - `src-tauri/src/lib.rs`
+  - `src/main.ts`
 
 ### Workstream 3: Updater Implementation
 - Status: `DONE` (implementation)
@@ -66,11 +68,11 @@
   - UI install button shown only when update is ready.
   - Updater artifacts/signatures configured for release workflow.
 - Evidence:
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/utils/updater.ts`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/tauri.conf.json`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/.github/workflows/release.yml`
+  - `src-tauri/src/lib.rs`
+  - `src/main.ts`
+  - `src/utils/updater.ts`
+  - `src-tauri/tauri.conf.json`
+  - `.github/workflows/release.yml`
 
 ### Workstream 4: Telemetry + Install Analytics
 - Status: `DONE`
@@ -82,11 +84,11 @@
   - Poll failure telemetry throttling to prevent event floods.
   - Daily GitHub release download snapshot pipeline.
 - Evidence:
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src-tauri/src/lib.rs`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/src/main.ts`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/docs/TELEMETRY_POLICY.md`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/.github/workflows/daily-install-snapshot.yml`
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/scripts/snapshot-release-downloads.mjs`
+  - `src-tauri/src/lib.rs`
+  - `src/main.ts`
+  - `docs/TELEMETRY_POLICY.md`
+  - `.github/workflows/daily-install-snapshot.yml`
+  - `scripts/snapshot-release-downloads.mjs`
 
 ### Workstream 5: Release + Distribution Operations
 - Status: `PARTIAL`
@@ -98,7 +100,7 @@
   - Run real signed/notarized release and verify Gatekeeper-friendly install path on device.
   - Run full updater E2E from published release.
 - Evidence:
-  - `/Users/niels.van.Galen.last/code/codex-reset-notifier/.github/workflows/release.yml`
+  - `.github/workflows/release.yml`
 
 ## Deferred / Out of Scope (Explicit)
 - Homebrew cask packaging follow-up.
