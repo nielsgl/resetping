@@ -4,11 +4,17 @@ ResetPing is a tray-first desktop notifier for Codex reset status. It polls `htt
 
 ## Install
 
-### Homebrew (recommended)
+### Homebrew (recommended for free-mode builds)
 
 ```bash
 brew tap nielsgl/tap
-brew install --cask nielsgl/tap/resetping
+brew install --cask --no-quarantine nielsgl/tap/resetping
+```
+
+If you already installed without `--no-quarantine` and launch is blocked:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ResetPing.app
 ```
 
 ### GitHub Releases
@@ -17,14 +23,47 @@ Download the latest macOS `.dmg` from:
 
 - `https://github.com/nielsgl/resetping/releases/latest`
 
-### macOS trust warning (free mode / non-notarized)
+After install, if launch is blocked:
 
-When `FREE_MODE=true` releases are not notarized. On first launch, macOS may block the app.
+```bash
+xattr -dr com.apple.quarantine /Applications/ResetPing.app
+```
 
-If blocked:
-1. Open `System Settings` -> `Privacy & Security`.
-2. In the security section, allow opening `ResetPing`.
-3. Or right-click the app in Finder and choose `Open` once.
+### Why this is needed in free mode
+
+When `FREE_MODE=true`, releases are not Apple notarized. macOS Gatekeeper can quarantine internet-downloaded apps and block first launch. This is expected behavior for unsigned/non-notarized distribution.
+
+### Build from source (macOS, no release download required)
+
+Requirements:
+- Node.js 20+
+- Rust stable toolchain
+- Tauri prerequisites: <https://v2.tauri.app/start/prerequisites/>
+
+Build and run:
+
+```bash
+git clone https://github.com/nielsgl/resetping.git
+cd resetping
+npm install
+npm run tauri dev
+```
+
+Build a local release app:
+
+```bash
+npm run tauri -- build --bundles app,dmg
+```
+
+Local outputs:
+- `src-tauri/target/release/bundle/macos/ResetPing.app`
+- `src-tauri/target/release/bundle/dmg/*.dmg`
+
+If needed after moving/copying the app:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ResetPing.app
+```
 
 ## Current v1 implementation
 
@@ -73,6 +112,12 @@ Install and run:
 ```bash
 npm install
 npm run tauri dev
+```
+
+Create production bundles locally:
+
+```bash
+npm run tauri -- build
 ```
 
 HTTP backend A/B in dev:
