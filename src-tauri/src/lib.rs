@@ -593,6 +593,64 @@ fn low_power_mode_active() -> bool {
     false
 }
 
+fn normalize_effective_state(state: &str) -> &'static str {
+    if state == "no" {
+        "no"
+    } else {
+        "yes"
+    }
+}
+
+fn should_notify_transition(policy: NotificationPolicy, current: &str) -> bool {
+    match policy {
+        NotificationPolicy::Flip => true,
+        NotificationPolicy::NoToYes => current == "yes",
+    }
+}
+
+fn push_transition_with_cap(transitions: &mut VecDeque<TransitionEntry>, entry: TransitionEntry) {
+    transitions.push_back(entry);
+    while transitions.len() > TRANSITIONS_LIMIT {
+        transitions.pop_front();
+    }
+}
+
+fn parse_status_payload(
+    body: &str,
+    status_label: &str,
+    status_success: bool,
+    fetched_at_ms: u64,
+    transport: FetchTransport,
+) -> Result<NormalizedStatus, String> {
+    let payload: StatusApiPayload = serde_json::from_str(body).map_err(|e| {
+        if status_success {
+            format!("invalid response body: {e:#} (debug: {e:?})")
+        } else {
+            format!(
+                "request failed with status {status_label} and unparsable body: {e:#} (debug: {e:?}); body={body}"
+            )
+        }
+    })?;
+
+    if !status_success {
+        let upstream = payload
+            .error
+            .as_deref()
+            .unwrap_or("no upstream error message");
+        return Err(format!(
+            "request failed with status {status_label}; upstream_error={upstream}"
+        ));
+    }
+
+    Ok(NormalizedStatus {
+        effective_state: normalize_effective_state(&payload.state).to_string(),
+        source_timestamp_ms: payload.updated_at,
+        fetched_at_ms,
+        configured: payload.configured,
+        transport,
+    })
+}
+
 async fn fetch_status(settings: &AppSettings) -> Result<NormalizedStatus, String> {
     let mut builder = Client::builder().timeout(Duration::from_millis(settings.http_timeout_ms));
     #[cfg(feature = "http-native-tls")]
@@ -635,36 +693,13 @@ async fn fetch_status(settings: &AppSettings) -> Result<NormalizedStatus, String
         .text()
         .await
         .map_err(|e| format!("invalid response body: {e:#} (debug: {e:?})"))?;
-
-    let payload: StatusApiPayload = serde_json::from_str(&body).map_err(|e| {
-        if status.is_success() {
-            format!("invalid response body: {e:#} (debug: {e:?})")
-        } else {
-            format!(
-                "request failed with status {status} and unparsable body: {e:#} (debug: {e:?}); body={body}"
-            )
-        }
-    })?;
-
-    if !status.is_success() {
-        let upstream = payload
-            .error
-            .as_deref()
-            .unwrap_or("no upstream error message");
-        return Err(format!(
-            "request failed with status {status}; upstream_error={upstream}"
-        ));
-    }
-
-    let effective_state = if payload.state == "no" { "no" } else { "yes" };
-
-    Ok(NormalizedStatus {
-        effective_state: effective_state.to_string(),
-        source_timestamp_ms: payload.updated_at,
-        fetched_at_ms: now_ms(),
-        configured: payload.configured,
-        transport: FetchTransport::Reqwest,
-    })
+    parse_status_payload(
+        &body,
+        &status.to_string(),
+        status.is_success(),
+        now_ms(),
+        FetchTransport::Reqwest,
+    )
 }
 
 async fn fetch_status_via_curl(settings: &AppSettings) -> Result<NormalizedStatus, String> {
@@ -710,25 +745,19 @@ async fn fetch_status_via_curl(settings: &AppSettings) -> Result<NormalizedStatu
         .parse()
         .map_err(|e| format!("curl fallback invalid HTTP status trailer: {e}"))?;
 
-    let payload: StatusApiPayload = serde_json::from_str(body)
-        .map_err(|e| format!("curl fallback invalid response body: {e:#} (debug: {e:?})"))?;
-    if status_code >= 400 {
-        let upstream = payload
-            .error
-            .as_deref()
-            .unwrap_or("no upstream error message");
-        return Err(format!(
-            "request failed with status {status_code}; upstream_error={upstream}"
-        ));
-    }
-    let effective_state = if payload.state == "no" { "no" } else { "yes" };
-
-    Ok(NormalizedStatus {
-        effective_state: effective_state.to_string(),
-        source_timestamp_ms: payload.updated_at,
-        fetched_at_ms: now_ms(),
-        configured: payload.configured,
-        transport: FetchTransport::CurlFallback,
+    parse_status_payload(
+        body,
+        &status_code.to_string(),
+        status_code < 400,
+        now_ms(),
+        FetchTransport::CurlFallback,
+    )
+    .map_err(|err| {
+        if err.starts_with("invalid response body:") {
+            format!("curl fallback {err}")
+        } else {
+            err
+        }
     })
 }
 
@@ -1104,21 +1133,19 @@ async fn perform_poll(app: AppHandle, state: SharedState, reason: &str) {
 
                 if let Some(prev) = previous {
                     if prev != current {
-                        guard.transitions.push_back(TransitionEntry {
-                            from: prev.clone(),
-                            to: current.clone(),
-                            detected_at: status.fetched_at_ms,
-                            source_updated_at: status.source_timestamp_ms,
-                        });
-
-                        while guard.transitions.len() > TRANSITIONS_LIMIT {
-                            guard.transitions.pop_front();
-                        }
-
-                        let should_notify = match guard.settings.notification_policy {
-                            NotificationPolicy::Flip => true,
-                            NotificationPolicy::NoToYes => current == "yes",
-                        };
+                        push_transition_with_cap(
+                            &mut guard.transitions,
+                            TransitionEntry {
+                                from: prev.clone(),
+                                to: current.clone(),
+                                detected_at: status.fetched_at_ms,
+                                source_updated_at: status.source_timestamp_ms,
+                            },
+                        );
+                        let should_notify = should_notify_transition(
+                            guard.settings.notification_policy.clone(),
+                            &current,
+                        );
 
                         if should_notify {
                             notify = Some((
@@ -1754,5 +1781,82 @@ mod tests {
         assert_eq!(response.status, UpdateCheckStatus::UnsupportedPlatform);
         assert!(!response.install_ready);
         assert_eq!(response.current_version.as_deref(), Some("0.1.0"));
+    }
+
+    #[test]
+    fn notification_policy_routing_is_stable() {
+        assert!(should_notify_transition(NotificationPolicy::Flip, "yes"));
+        assert!(should_notify_transition(NotificationPolicy::Flip, "no"));
+        assert!(should_notify_transition(NotificationPolicy::NoToYes, "yes"));
+        assert!(!should_notify_transition(NotificationPolicy::NoToYes, "no"));
+    }
+
+    #[test]
+    fn transition_history_is_capped_at_limit() {
+        let mut transitions = VecDeque::new();
+        for i in 0..(TRANSITIONS_LIMIT as u64 + 5) {
+            push_transition_with_cap(
+                &mut transitions,
+                TransitionEntry {
+                    from: "no".to_string(),
+                    to: "yes".to_string(),
+                    detected_at: i,
+                    source_updated_at: Some(i),
+                },
+            );
+        }
+
+        assert_eq!(transitions.len(), TRANSITIONS_LIMIT);
+        assert_eq!(transitions.front().map(|entry| entry.detected_at), Some(5));
+        assert_eq!(
+            transitions.back().map(|entry| entry.detected_at),
+            Some(TRANSITIONS_LIMIT as u64 + 4)
+        );
+    }
+
+    #[test]
+    fn parse_status_payload_maps_any_non_no_to_yes() {
+        let status = parse_status_payload(
+            r#"{"state":"maybe","configured":true,"updatedAt":123}"#,
+            "200",
+            true,
+            999,
+            FetchTransport::Reqwest,
+        )
+        .expect("expected successful parse");
+
+        assert_eq!(status.effective_state, "yes");
+        assert_eq!(status.source_timestamp_ms, Some(123));
+        assert_eq!(status.fetched_at_ms, 999);
+    }
+
+    #[test]
+    fn parse_status_payload_treats_non_2xx_as_failure_even_with_valid_json() {
+        let err = parse_status_payload(
+            r#"{"state":"yes","configured":false,"updatedAt":456,"error":"upstream down"}"#,
+            "503 Service Unavailable",
+            false,
+            1000,
+            FetchTransport::Reqwest,
+        )
+        .expect_err("expected non-success status to fail");
+
+        assert!(err.contains("request failed with status 503 Service Unavailable"));
+        assert!(err.contains("upstream_error=upstream down"));
+    }
+
+    #[test]
+    fn parse_status_payload_reports_unparsable_error_body() {
+        let err = parse_status_payload(
+            "<html>gateway timeout</html>",
+            "504 Gateway Timeout",
+            false,
+            1000,
+            FetchTransport::Reqwest,
+        )
+        .expect_err("expected unparsable body to fail");
+
+        assert!(err.contains("unparsable body"));
+        assert!(err.contains("504 Gateway Timeout"));
     }
 }
