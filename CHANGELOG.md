@@ -10,6 +10,17 @@ Format rules:
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-03-14
+
+### Added
+- Settings screen now displays the running app version for quick verification during install/update testing.
+
+### Changed
+- Packaged release builds now support build-time Sentry DSN injection via release workflow secrets.
+
+### Fixed
+- Updater release pipeline now publishes `latest*.json` metadata artifacts required by in-app update checks.
+
 ## [0.1.1] - 2026-03-14
 
 ### Added

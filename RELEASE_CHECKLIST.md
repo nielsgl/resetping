@@ -1,7 +1,7 @@
-# Release Checklist: v0.1.1
+# Release Checklist: v0.1.2
 
 ## Scope
-- Release target: `v0.1.1`
+- Release target: `v0.1.2`
 - Distribution mode: `FREE_MODE=true`
 - Objective: verify release pipeline, Homebrew tap auto-update, and updater/install runtime behavior end-to-end.
 
