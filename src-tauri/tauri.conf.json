@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "untrusted comment: minisign public key: C82F8344CC3813BC\nRWS8EzjMRIMvyI/S5Qgpq7DBOF0NQwDOYZlrPpu+C6VeI5rq1/CYGuVY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MkY4MzQ0Q0MzODEzQkMKUldTOEV6ak1SSU12eUkvUzVRZ3BxN0RCT0YwTlF3RE9ZWmxyUHB1K0M2VmVJNXJxMS9DWUd1VlkK",
       "endpoints": [
         "https://github.com/nielsgl/resetping/releases/latest/download/latest.json"
       ],
