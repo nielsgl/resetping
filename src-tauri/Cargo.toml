@@ -1,6 +1,6 @@
 [package]
 name = "resetping"
-version = "0.1.0"
+version = "0.1.1"
 description = "ResetPing - Codex reset notifier"
 authors = ["niels.van.Galen.last"]
 edition = "2021"
