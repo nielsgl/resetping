@@ -397,7 +397,11 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- Casks/resetping.rb; then
+          if [ ! -f Casks/resetping.rb ]; then
+            echo "Expected Casks/resetping.rb to exist before commit."
+            exit 1
+          fi
+          if [ -z "$(git status --porcelain -- Casks/resetping.rb)" ]; then
             echo "No cask changes to commit."
             exit 0
           fi
