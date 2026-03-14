@@ -123,6 +123,7 @@ struct LogEntry {
 
 #[derive(Debug, Clone, Serialize)]
 struct AppStateResponse {
+    app_version: String,
     settings: AppSettings,
     snapshot: RuntimeSnapshot,
     transitions: Vec<TransitionEntry>,
@@ -400,6 +401,7 @@ fn emit_state_changed(app: &AppHandle, runtime: &RuntimeState) {
     let _ = app.emit(
         "state-updated",
         AppStateResponse {
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
             settings: runtime.settings.clone(),
             snapshot: runtime.snapshot.clone(),
             transitions: runtime.transitions.iter().cloned().collect(),
@@ -1370,6 +1372,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
 fn get_app_state(state: State<'_, SharedState>) -> Result<AppStateResponse, String> {
     let guard = state.inner.lock().unwrap();
     Ok(AppStateResponse {
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
         settings: guard.settings.clone(),
         snapshot: guard.snapshot.clone(),
         transitions: guard.transitions.iter().cloned().collect(),

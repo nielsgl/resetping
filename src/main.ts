@@ -46,6 +46,7 @@ type LogEntry = {
 };
 
 type AppStateResponse = {
+  app_version: string;
   settings: AppSettings;
   snapshot: RuntimeSnapshot;
   transitions: TransitionEntry[];
@@ -73,6 +74,7 @@ app.innerHTML = `
     <header class="hero">
       <h1>ResetPing</h1>
       <p>Codex reset notifier</p>
+      <p id="app-version" class="muted"></p>
       <div class="hero-actions">
         <button id="refresh-now">Force Refresh</button>
         <button id="test-notification">Send Test Notification</button>
@@ -262,6 +264,10 @@ function renderAll(state: AppStateResponse, options: { forceFormSync?: boolean }
     errorTelemetryEnabled: state.settings.error_telemetry_enabled,
   });
   currentState = state;
+  const versionEl = document.querySelector<HTMLParagraphElement>("#app-version");
+  if (versionEl) {
+    versionEl.textContent = `Version ${state.app_version}`;
+  }
   setStatusCards(state.snapshot, state.health);
   if (options.forceFormSync || !isSettingsFormDirty) {
     setFormValues(state.settings);
