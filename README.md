@@ -2,6 +2,30 @@
 
 ResetPing is a tray-first desktop notifier for Codex reset status. It polls `https://hascodexratelimitreset.today/api/status` and sends native notifications when the state changes.
 
+## Install
+
+### Homebrew (recommended)
+
+```bash
+brew tap nielsgl/tap
+brew install --cask nielsgl/tap/resetping
+```
+
+### GitHub Releases
+
+Download the latest macOS `.dmg` from:
+
+- `https://github.com/nielsgl/resetping/releases/latest`
+
+### macOS trust warning (free mode / non-notarized)
+
+When `FREE_MODE=true` releases are not notarized. On first launch, macOS may block the app.
+
+If blocked:
+1. Open `System Settings` -> `Privacy & Security`.
+2. In the security section, allow opening `ResetPing`.
+3. Or right-click the app in Finder and choose `Open` once.
+
 ## Current v1 implementation
 
 - Tauri + Rust backend + TypeScript settings UI
@@ -210,23 +234,33 @@ See telemetry/data constraints in:
 CI and release workflow files are under `.github/workflows`:
 
 - `ci.yml`: lint/type/build/test on macOS, Linux, and Windows
-- `release.yml`: release pipeline with platform artifacts and macOS signing/notarization hooks
+- `release.yml`: release pipeline with platform artifacts, optional Apple signing/notarization, and Homebrew tap auto-update
 
-For macOS signed+notarized releases, configure these repository secrets:
+The release workflow has a `workflow_dispatch` input:
+
+- `free_mode` (default `true`)
+  - `true`: skip Apple Developer signing/notarization (free distribution mode)
+  - `false`: run full Apple signing/notarization path
+
+Required secrets for free mode:
+
+- `TAURI_SIGNING_PRIVATE_KEY_B64`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- `HOMEBREW_TAP_PAT` (fine-grained PAT with write access to `nielsgl/homebrew-tap`)
+
+Required variables for free mode:
+
+- `TAURI_UPDATER_PUBLIC_KEY`
+
+Additional secrets/variables needed only for paid Apple signing/notarization mode (`free_mode=false`):
 
 - `APPLE_CERTIFICATE_P12`
 - `APPLE_CERTIFICATE_PASSWORD`
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER_ID`
 - `APPLE_API_PRIVATE_KEY_B64`
-- `TAURI_SIGNING_PRIVATE_KEY_B64`
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-
-And these variables:
-
 - `CODESIGN_IDENTITY`
 - `NOTARY_PROFILE_NAME`
-- `TAURI_UPDATER_PUBLIC_KEY`
 
 ## License
 

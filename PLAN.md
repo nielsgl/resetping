@@ -21,7 +21,9 @@
   - Use absolute dates.
   - Do not delete prior entries.
   - Newest entry goes at the top.
-  - `evidence` must reference concrete repository paths when code/docs/workflow changed.
+- `evidence` must reference concrete repository paths when code/docs/workflow changed.
+
+- 2026-03-14 | actor=codex | sections=Plan Status Changelog,Delivery Ledger,Final Release Gate Checklist | change=implemented free-distribution release mode and automated Homebrew cask update path | reason=enable no-Apple-membership shipping while preserving updater flow | evidence=.github/workflows/release.yml,README.md
 
 - 2026-03-14 | actor=codex | sections=Plan Status Changelog,Delivery Ledger evidence paths | change=normalized evidence paths to repo-relative and aligned docs after workspace rename to resetping | reason=remove machine-specific absolute paths that break portability/readability | evidence=PLAN.md
 
@@ -95,9 +97,12 @@
 - Done:
   - Cross-platform build/release workflows exist.
   - macOS signing/notarization steps and updater artifact checks exist in workflow.
+  - `workflow_dispatch.free_mode` path implemented to ship without Apple signing/notarization.
+  - Free-mode ad-hoc macOS app signing implemented.
+  - Homebrew tap (`nielsgl/homebrew-tap`) auto-update job implemented from release artifacts.
 - Pending to close v1 gate:
-  - Confirm CI secrets/vars are configured in GitHub environment.
-  - Run real signed/notarized release and verify Gatekeeper-friendly install path on device.
+  - Confirm free-mode CI secrets/vars are configured in GitHub environment (`TAURI_SIGNING_PRIVATE_KEY_B64`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `TAURI_UPDATER_PUBLIC_KEY`, `HOMEBREW_TAP_PAT`).
+  - Run free-mode release and verify Gatekeeper bypass path on device.
   - Run full updater E2E from published release.
 - Evidence:
   - `.github/workflows/release.yml`
@@ -107,8 +112,8 @@
 - App-store distribution path.
 
 ## Final Release Gate Checklist
-- `PENDING` Release pipeline executed successfully with real signing/notarization credentials.
-- `PENDING` macOS signed install smoke test (fresh machine profile).
+- `PENDING` Free-mode release pipeline executed successfully with real updater/tap credentials.
+- `PENDING` macOS free-mode install smoke test (fresh machine profile, Gatekeeper bypass documented path).
 - `PENDING` Launch-at-login manual verification matrix (enable/disable + reboot).
 - `PENDING` Updater E2E verification (`check -> install -> restart`) on published artifact.
 - `PENDING` Cross-platform beta tray/notification parity checks (Windows/Linux).
