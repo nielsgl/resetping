@@ -36,7 +36,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
@@ -148,7 +148,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
@@ -224,7 +224,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
