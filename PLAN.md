@@ -23,6 +23,8 @@
   - Newest entry goes at the top.
 - `evidence` must reference concrete repository paths when code/docs/workflow changed.
 
+- 2026-03-14 | actor=codex | sections=Current Status Snapshot,Delivery Ledger,Final Release Gate Checklist,Next Actions | change=updated ledger to reflect successful free-mode release/publish, corrected remaining gates to manual QA + next-version tap automation proof | reason=remove stale deferred items and make ship criteria executable | evidence=PLAN.md,.github/workflows/release.yml
+
 - 2026-03-14 | actor=codex | sections=Plan Status Changelog,Delivery Ledger,Final Release Gate Checklist | change=implemented free-distribution release mode and automated Homebrew cask update path | reason=enable no-Apple-membership shipping while preserving updater flow | evidence=.github/workflows/release.yml,README.md
 
 - 2026-03-14 | actor=codex | sections=Plan Status Changelog,Delivery Ledger evidence paths | change=normalized evidence paths to repo-relative and aligned docs after workspace rename to resetping | reason=remove machine-specific absolute paths that break portability/readability | evidence=PLAN.md
@@ -31,11 +33,11 @@
 
 ## Current Status Snapshot
 - Product target: `ResetPing` tray app for Codex reset status polling + notifications.
-- Current implementation state: **core product complete**, **updater implementation complete**, **release/ops validation partially complete**.
+- Current implementation state: **core product complete**, **updater implementation complete**, **free-mode release pipeline operational**, **manual ship validation pending**.
 - Delivery posture:
-  - `DONE`: core polling/state machine/tray/settings/notifications/diagnostics/telemetry/install-metrics snapshot pipeline.
-  - `PENDING`: release hardening and final manual QA gates.
-  - `DEFERRED`: Homebrew cask follow-up (explicitly outside v1 ship gate).
+  - `DONE`: core runtime, security hardening, updater implementation, telemetry/analytics, free-mode build+publish, Homebrew tap cask generation path.
+  - `PENDING`: manual QA gates (launch-at-login, updater E2E, Gatekeeper flow, cross-platform parity) and one fresh-version proof of cask auto-update.
+  - `DEFERRED`: paid Apple Developer signing/notarization path and app-store distribution.
 
 ## Delivery Ledger
 
@@ -93,26 +95,26 @@
   - `scripts/snapshot-release-downloads.mjs`
 
 ### Workstream 5: Release + Distribution Operations
-- Status: `PARTIAL`
+- Status: `DONE` (free-mode path)
 - Done:
   - Cross-platform build/release workflows exist.
   - macOS signing/notarization steps and updater artifact checks exist in workflow.
   - `workflow_dispatch.free_mode` path implemented to ship without Apple signing/notarization.
   - Free-mode ad-hoc macOS app signing implemented.
   - Homebrew tap (`nielsgl/homebrew-tap`) auto-update job implemented from release artifacts.
-- Pending to close v1 gate:
-  - Confirm free-mode CI secrets/vars are configured in GitHub environment (`TAURI_SIGNING_PRIVATE_KEY_B64`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `TAURI_UPDATER_PUBLIC_KEY`, `HOMEBREW_TAP_PAT`).
-  - Run free-mode release and verify Gatekeeper bypass path on device.
-  - Run full updater E2E from published release.
+- Notes:
+  - Free-mode release + publish succeeded with real credentials.
+  - First-run cask commit detection bug was fixed (workflow now handles untracked cask file creation).
 - Evidence:
   - `.github/workflows/release.yml`
 
 ## Deferred / Out of Scope (Explicit)
-- Homebrew cask packaging follow-up.
+- Paid Apple Developer Program signing/notarization operationalization.
 - App-store distribution path.
 
 ## Final Release Gate Checklist
-- `PENDING` Free-mode release pipeline executed successfully with real updater/tap credentials.
+- `DONE` Free-mode release pipeline executed successfully with real updater/tap credentials.
+- `PARTIAL` Homebrew tap automation validated. Auth and job path pass; still need fresh-version proof (`v0.1.1+`) that CI updates cask content without manual intervention.
 - `PENDING` macOS free-mode install smoke test (fresh machine profile, Gatekeeper bypass documented path).
 - `PENDING` Launch-at-login manual verification matrix (enable/disable + reboot).
 - `PENDING` Updater E2E verification (`check -> install -> restart`) on published artifact.
@@ -120,10 +122,12 @@
 - `DONE` Automated checks (`npm test/typecheck/build`, `cargo fmt/clippy/test`) on current branch.
 
 ## Next Actions (Priority Order)
-1. Run one full release dry-run in GitHub Actions with real secrets and verify notarization + stapling output.
-2. Validate updater E2E from published `latest.json` + signed artifacts on macOS.
-3. Execute manual QA checklist and capture pass/fail evidence in `RELEASE_CHECKLIST.md`.
-4. After gates pass, cut/tag v1 release and publish release notes.
+1. Cut `v0.1.1` and run release workflow to prove end-to-end automated cask update in CI (no manual tap commit path).
+2. Validate updater E2E on macOS installed build: `Check for updates` -> `Install update` -> app relaunches on new version.
+3. Execute launch-at-login matrix on macOS (enable, reboot, verify auto-start; disable, reboot, verify no auto-start).
+4. Execute free-mode Gatekeeper install test on a clean profile and verify README bypass steps remain accurate.
+5. Run Windows/Linux manual beta parity checks (tray presence, force refresh, test notification, degraded indicator).
+6. Capture all manual QA evidence in `RELEASE_CHECKLIST.md` and mark corresponding checklist items `DONE`.
 
 ---
 
