@@ -107,9 +107,7 @@ jobs:
       - name: Verify updater artifacts
         run: |
           set -euo pipefail
-          find src-tauri/target/release/bundle -name 'latest*.json' -print
           find src-tauri/target/release/bundle -name '*.sig' -print
-          test -n "$(find src-tauri/target/release/bundle -name 'latest*.json' -print -quit)"
           test -n "$(find src-tauri/target/release/bundle -name '*.sig' -print -quit)"
 
       - name: Notarize and staple
@@ -127,7 +125,6 @@ jobs:
           path: |
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/macos/*.app.tar.gz*
-            src-tauri/target/release/bundle/**/latest*.json
 
   build_windows:
     runs-on: windows-latest
@@ -189,9 +186,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find src-tauri/target/release/bundle -name 'latest*.json' -print
           find src-tauri/target/release/bundle -name '*.sig' -print
-          test -n "$(find src-tauri/target/release/bundle -name 'latest*.json' -print -quit)"
           test -n "$(find src-tauri/target/release/bundle -name '*.sig' -print -quit)"
 
       - name: Upload Windows artifacts
@@ -201,7 +196,6 @@ jobs:
           path: |
             src-tauri/target/release/bundle/nsis/*.exe*
             src-tauri/target/release/bundle/msi/*.msi*
-            src-tauri/target/release/bundle/**/latest*.json
 
   build_linux:
     strategy:
@@ -261,9 +255,7 @@ jobs:
       - name: Verify updater artifacts
         run: |
           set -euo pipefail
-          find src-tauri/target/release/bundle -name 'latest*.json' -print
           find src-tauri/target/release/bundle -name '*.sig' -print
-          test -n "$(find src-tauri/target/release/bundle -name 'latest*.json' -print -quit)"
           test -n "$(find src-tauri/target/release/bundle -name '*.sig' -print -quit)"
 
       - name: Upload Linux artifacts
@@ -272,7 +264,6 @@ jobs:
           name: linux-artifacts-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle/appimage/*.AppImage*
-            src-tauri/target/release/bundle/**/latest*.json
 
   publish:
     needs: [build_macos, build_windows, build_linux]
@@ -341,6 +332,37 @@ jobs:
             cp "$file" "$staged"
             FILES+=("$staged")
           done
+
+          MAC_UPDATER_ARCHIVE="$(find release-artifacts -type f -name 'ResetPing.app.tar.gz' -print -quit)"
+          if [ -z "$MAC_UPDATER_ARCHIVE" ]; then
+            echo "Missing macOS updater archive (ResetPing.app.tar.gz)"
+            exit 1
+          fi
+          MAC_UPDATER_SIG="${MAC_UPDATER_ARCHIVE}.sig"
+          if [ ! -f "$MAC_UPDATER_SIG" ]; then
+            echo "Missing macOS updater signature: $MAC_UPDATER_SIG"
+            exit 1
+          fi
+
+          MAC_UPDATER_NAME="$(basename "$MAC_UPDATER_ARCHIVE")"
+          MAC_UPDATER_SIGNATURE="$(tr -d '\r\n' < "$MAC_UPDATER_SIG")"
+          MAC_UPDATER_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${MAC_UPDATER_NAME}"
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          cat > "$STAGE_DIR/latest.json" <<EOF
+          {
+            "version": "${VERSION}",
+            "notes": "ResetPing release ${TAG}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${MAC_UPDATER_SIGNATURE}",
+                "url": "${MAC_UPDATER_URL}"
+              }
+            }
+          }
+          EOF
+          FILES+=("$STAGE_DIR/latest.json")
 
           gh release create "$TAG" \
             --title "ResetPing $TAG" \
