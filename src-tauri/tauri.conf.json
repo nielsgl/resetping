@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "$TAURI_UPDATER_PUBLIC_KEY",
+      "pubkey": "untrusted comment: minisign public key: C82F8344CC3813BC\nRWS8EzjMRIMvyI/S5Qgpq7DBOF0NQwDOYZlrPpu+C6VeI5rq1/CYGuVY",
       "endpoints": [
         "https://github.com/nielsgl/resetping/releases/latest/download/latest.json"
       ],
