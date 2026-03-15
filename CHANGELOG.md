@@ -10,6 +10,12 @@ Format rules:
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-03-15
+
+### Fixed
+- In-app updater install now relies on the bundled updater public key from app config, preventing install failures caused by malformed build-time key overrides.
+- Release workflow no longer injects `TAURI_UPDATER_PUBLIC_KEY` into build job environments, removing a key-format mismatch path.
+
 ## [0.1.3] - 2026-03-14
 
 ### Changed
