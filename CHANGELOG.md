@@ -10,6 +10,11 @@ Format rules:
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-03-15
+
+### Changed
+- Improved version label contrast in the settings header so the running app version is clearly readable.
+
 ## [0.1.4] - 2026-03-15
 
 ### Fixed
