@@ -44,6 +44,13 @@ body {
   opacity: 0.9;
 }
 
+#app-version {
+  color: #effaf3;
+  opacity: 0.95;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
