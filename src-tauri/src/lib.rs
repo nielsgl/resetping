@@ -283,10 +283,6 @@ fn should_emit_poll_failure_telemetry(consecutive_failures: u32) -> bool {
     matches!(consecutive_failures, 1 | 5 | 20 | 100)
 }
 
-fn updater_public_key() -> Option<&'static str> {
-    option_env!("TAURI_UPDATER_PUBLIC_KEY").filter(|value| !value.trim().is_empty())
-}
-
 fn updater_supported_platform() -> bool {
     cfg!(target_os = "macos")
 }
@@ -811,108 +807,95 @@ async fn perform_update_check(
             "In-app updater is enabled on macOS only for v1.",
         )
     } else {
-        match updater_public_key() {
-            None => update_response(
-                checked_at,
-                UpdateCheckStatus::CheckFailed,
-                None,
-                Some(env!("CARGO_PKG_VERSION").to_string()),
-                None,
-                false,
-                "Updater public key is not configured.",
-            ),
-            Some(pubkey) => {
-                let endpoint = match DEFAULT_UPDATER_ENDPOINT.parse::<tauri::Url>() {
-                    Ok(endpoint) => endpoint,
-                    Err(err) => {
-                        return update_response(
-                            checked_at,
-                            UpdateCheckStatus::CheckFailed,
-                            None,
-                            Some(env!("CARGO_PKG_VERSION").to_string()),
-                            None,
-                            false,
-                            format!("Updater endpoint URL is invalid: {err}"),
-                        )
-                    }
-                };
-                let builder = app.updater_builder().endpoints(vec![endpoint]);
-                let updater = match builder {
-                    Ok(builder) => builder.pubkey(pubkey).build(),
-                    Err(err) => Err(err),
-                };
+        let endpoint = match DEFAULT_UPDATER_ENDPOINT.parse::<tauri::Url>() {
+            Ok(endpoint) => endpoint,
+            Err(err) => {
+                return update_response(
+                    checked_at,
+                    UpdateCheckStatus::CheckFailed,
+                    None,
+                    Some(env!("CARGO_PKG_VERSION").to_string()),
+                    None,
+                    false,
+                    format!("Updater endpoint URL is invalid: {err}"),
+                )
+            }
+        };
+        let builder = app.updater_builder().endpoints(vec![endpoint]);
+        let updater = match builder {
+            Ok(builder) => builder.build(),
+            Err(err) => Err(err),
+        };
 
-                match updater {
-                    Ok(updater) => match updater.check().await {
-                        Ok(Some(update)) => {
-                            let version = update.version.clone();
-                            let current_version = update.current_version.clone();
-                            let notes = update.body.clone();
-                            {
-                                let mut guard = state.inner.lock().unwrap();
-                                guard.pending_update = Some(update);
-                            }
-                            update_response(
-                                checked_at,
-                                UpdateCheckStatus::UpdateAvailable,
-                                Some(version),
-                                Some(current_version),
-                                notes,
-                                true,
-                                "Update is available. Use Install Update to apply it.",
-                            )
-                        }
-                        Ok(None) => update_response(
-                            checked_at,
-                            UpdateCheckStatus::UpToDate,
-                            None,
-                            Some(env!("CARGO_PKG_VERSION").to_string()),
-                            None,
-                            false,
-                            "ResetPing is up to date.",
-                        ),
-                        Err(err) => {
-                            if settings.error_telemetry_enabled {
-                                capture_telemetry_error(
-                                    &settings,
-                                    &installation_id,
-                                    &format!("Updater check failed: {err}"),
-                                    "updater",
-                                    "check_failed",
-                                );
-                            }
-                            update_response(
-                                checked_at,
-                                UpdateCheckStatus::CheckFailed,
-                                None,
-                                Some(env!("CARGO_PKG_VERSION").to_string()),
-                                None,
-                                false,
-                                format!("Update check failed: {err}"),
-                            )
-                        }
-                    },
-                    Err(err) => {
-                        if settings.error_telemetry_enabled {
-                            capture_telemetry_error(
-                                &settings,
-                                &installation_id,
-                                &format!("Updater initialization failed: {err}"),
-                                "updater",
-                                "setup_failed",
-                            );
-                        }
-                        update_response(
-                            checked_at,
-                            UpdateCheckStatus::CheckFailed,
-                            None,
-                            Some(env!("CARGO_PKG_VERSION").to_string()),
-                            None,
-                            false,
-                            format!("Updater initialization failed: {err}"),
-                        )
+        match updater {
+            Ok(updater) => match updater.check().await {
+                Ok(Some(update)) => {
+                    let version = update.version.clone();
+                    let current_version = update.current_version.clone();
+                    let notes = update.body.clone();
+                    {
+                        let mut guard = state.inner.lock().unwrap();
+                        guard.pending_update = Some(update);
                     }
+                    update_response(
+                        checked_at,
+                        UpdateCheckStatus::UpdateAvailable,
+                        Some(version),
+                        Some(current_version),
+                        notes,
+                        true,
+                        "Update is available. Use Install Update to apply it.",
+                    )
                 }
+                Ok(None) => update_response(
+                    checked_at,
+                    UpdateCheckStatus::UpToDate,
+                    None,
+                    Some(env!("CARGO_PKG_VERSION").to_string()),
+                    None,
+                    false,
+                    "ResetPing is up to date.",
+                ),
+                Err(err) => {
+                    if settings.error_telemetry_enabled {
+                        capture_telemetry_error(
+                            &settings,
+                            &installation_id,
+                            &format!("Updater check failed: {err}"),
+                            "updater",
+                            "check_failed",
+                        );
+                    }
+                    update_response(
+                        checked_at,
+                        UpdateCheckStatus::CheckFailed,
+                        None,
+                        Some(env!("CARGO_PKG_VERSION").to_string()),
+                        None,
+                        false,
+                        format!("Update check failed: {err}"),
+                    )
+                }
+            },
+            Err(err) => {
+                if settings.error_telemetry_enabled {
+                    capture_telemetry_error(
+                        &settings,
+                        &installation_id,
+                        &format!("Updater initialization failed: {err}"),
+                        "updater",
+                        "setup_failed",
+                    );
+                }
+                update_response(
+                    checked_at,
+                    UpdateCheckStatus::CheckFailed,
+                    None,
+                    Some(env!("CARGO_PKG_VERSION").to_string()),
+                    None,
+                    false,
+                    format!("Updater initialization failed: {err}"),
+                )
             }
         }
     };
