@@ -23441,5 +23441,824 @@
         ]
       }
     ]
+  },
+  {
+    "captured_at": "2026-04-13T06:03:45.171Z",
+    "repo": "nielsgl/resetping",
+    "total_downloads": 10,
+    "releases": [
+      {
+        "id": 297158008,
+        "tag_name": "v0.1.5",
+        "name": "ResetPing v0.1.5",
+        "draft": false,
+        "prerelease": false,
+        "published_at": "2026-03-15T11:22:35Z",
+        "assets": [
+          {
+            "id": 374279515,
+            "name": "latest.json",
+            "content_type": "application/json",
+            "size": 683,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          },
+          {
+            "id": 374279505,
+            "name": "ResetPing.app.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 7869480,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:33Z"
+          },
+          {
+            "id": 374279507,
+            "name": "ResetPing.app.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 408,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:34Z"
+          },
+          {
+            "id": 374279492,
+            "name": "ResetPing_0.1.5_aarch64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 81816072,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:34Z"
+          },
+          {
+            "id": 374279496,
+            "name": "ResetPing_0.1.5_aarch64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:31Z"
+          },
+          {
+            "id": 374279495,
+            "name": "ResetPing_0.1.5_aarch64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 81179420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          },
+          {
+            "id": 374279494,
+            "name": "ResetPing_0.1.5_aarch64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:31Z"
+          },
+          {
+            "id": 374279503,
+            "name": "ResetPing_0.1.5_aarch64.dmg",
+            "content_type": "application/x-apple-diskimage",
+            "size": 7710521,
+            "download_count": 1,
+            "updated_at": "2026-03-15T11:22:33Z"
+          },
+          {
+            "id": 374279493,
+            "name": "ResetPing_0.1.5_amd64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 83905016,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:34Z"
+          },
+          {
+            "id": 374279497,
+            "name": "ResetPing_0.1.5_amd64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:32Z"
+          },
+          {
+            "id": 374279498,
+            "name": "ResetPing_0.1.5_amd64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 83258576,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:34Z"
+          },
+          {
+            "id": 374279501,
+            "name": "ResetPing_0.1.5_amd64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:32Z"
+          },
+          {
+            "id": 374279513,
+            "name": "ResetPing_0.1.5_x64-setup.exe",
+            "content_type": "application/x-msdownload",
+            "size": 4583560,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          },
+          {
+            "id": 374279514,
+            "name": "ResetPing_0.1.5_x64-setup.exe.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          },
+          {
+            "id": 374279508,
+            "name": "ResetPing_0.1.5_x64_en-US.msi",
+            "content_type": "application/x-msi",
+            "size": 6893568,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          },
+          {
+            "id": 374279509,
+            "name": "ResetPing_0.1.5_x64_en-US.msi.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:34Z"
+          },
+          {
+            "id": 374279510,
+            "name": "ResetPing_0.1.5_x64_en-US.msi.zip",
+            "content_type": "application/zip",
+            "size": 6893724,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          },
+          {
+            "id": 374279512,
+            "name": "ResetPing_0.1.5_x64_en-US.msi.zip.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-15T11:22:35Z"
+          }
+        ]
+      },
+      {
+        "id": 297155529,
+        "tag_name": "v0.1.4",
+        "name": "ResetPing v0.1.4",
+        "draft": false,
+        "prerelease": false,
+        "published_at": "2026-03-15T10:57:31Z",
+        "assets": [
+          {
+            "id": 374270556,
+            "name": "latest.json",
+            "content_type": "application/json",
+            "size": 683,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:31Z"
+          },
+          {
+            "id": 374270541,
+            "name": "ResetPing.app.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 7867703,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:27Z"
+          },
+          {
+            "id": 374270544,
+            "name": "ResetPing.app.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 408,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:28Z"
+          },
+          {
+            "id": 374270532,
+            "name": "ResetPing_0.1.4_aarch64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 81803784,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:31Z"
+          },
+          {
+            "id": 374270533,
+            "name": "ResetPing_0.1.4_aarch64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:25Z"
+          },
+          {
+            "id": 374270529,
+            "name": "ResetPing_0.1.4_aarch64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 81170515,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:31Z"
+          },
+          {
+            "id": 374270531,
+            "name": "ResetPing_0.1.4_aarch64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:25Z"
+          },
+          {
+            "id": 374270539,
+            "name": "ResetPing_0.1.4_aarch64.dmg",
+            "content_type": "application/x-apple-diskimage",
+            "size": 7706316,
+            "download_count": 1,
+            "updated_at": "2026-03-15T10:57:26Z"
+          },
+          {
+            "id": 374270530,
+            "name": "ResetPing_0.1.4_amd64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 83905016,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:31Z"
+          },
+          {
+            "id": 374270534,
+            "name": "ResetPing_0.1.4_amd64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:25Z"
+          },
+          {
+            "id": 374270535,
+            "name": "ResetPing_0.1.4_amd64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 83253999,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:30Z"
+          },
+          {
+            "id": 374270537,
+            "name": "ResetPing_0.1.4_amd64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:26Z"
+          },
+          {
+            "id": 374270552,
+            "name": "ResetPing_0.1.4_x64-setup.exe",
+            "content_type": "application/x-msdownload",
+            "size": 4580217,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:31Z"
+          },
+          {
+            "id": 374270555,
+            "name": "ResetPing_0.1.4_x64-setup.exe.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:30Z"
+          },
+          {
+            "id": 374270545,
+            "name": "ResetPing_0.1.4_x64_en-US.msi",
+            "content_type": "application/x-msi",
+            "size": 6893568,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:29Z"
+          },
+          {
+            "id": 374270549,
+            "name": "ResetPing_0.1.4_x64_en-US.msi.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:29Z"
+          },
+          {
+            "id": 374270550,
+            "name": "ResetPing_0.1.4_x64_en-US.msi.zip",
+            "content_type": "application/zip",
+            "size": 6893724,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:30Z"
+          },
+          {
+            "id": 374270551,
+            "name": "ResetPing_0.1.4_x64_en-US.msi.zip.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-15T10:57:30Z"
+          }
+        ]
+      },
+      {
+        "id": 297063511,
+        "tag_name": "v0.1.3",
+        "name": "ResetPing v0.1.3",
+        "draft": false,
+        "prerelease": false,
+        "published_at": "2026-03-14T20:47:26Z",
+        "assets": [
+          {
+            "id": 373934408,
+            "name": "latest.json",
+            "content_type": "application/json",
+            "size": 683,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934394,
+            "name": "ResetPing.app.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 7869577,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:25Z"
+          },
+          {
+            "id": 373934398,
+            "name": "ResetPing.app.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 408,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:25Z"
+          },
+          {
+            "id": 373934378,
+            "name": "ResetPing_0.1.3_aarch64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 81787400,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:25Z"
+          },
+          {
+            "id": 373934377,
+            "name": "ResetPing_0.1.3_aarch64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:23Z"
+          },
+          {
+            "id": 373934376,
+            "name": "ResetPing_0.1.3_aarch64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 81144306,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934380,
+            "name": "ResetPing_0.1.3_aarch64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:23Z"
+          },
+          {
+            "id": 373934388,
+            "name": "ResetPing_0.1.3_aarch64.dmg",
+            "content_type": "application/x-apple-diskimage",
+            "size": 7709437,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:24Z"
+          },
+          {
+            "id": 373934379,
+            "name": "ResetPing_0.1.3_amd64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 83900920,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934383,
+            "name": "ResetPing_0.1.3_amd64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:23Z"
+          },
+          {
+            "id": 373934385,
+            "name": "ResetPing_0.1.3_amd64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 83261599,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:25Z"
+          },
+          {
+            "id": 373934386,
+            "name": "ResetPing_0.1.3_amd64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:23Z"
+          },
+          {
+            "id": 373934405,
+            "name": "ResetPing_0.1.3_x64-setup.exe",
+            "content_type": "application/x-msdownload",
+            "size": 4581021,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934409,
+            "name": "ResetPing_0.1.3_x64-setup.exe.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934399,
+            "name": "ResetPing_0.1.3_x64_en-US.msi",
+            "content_type": "application/x-msi",
+            "size": 6889472,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934400,
+            "name": "ResetPing_0.1.3_x64_en-US.msi.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:25Z"
+          },
+          {
+            "id": 373934402,
+            "name": "ResetPing_0.1.3_x64_en-US.msi.zip",
+            "content_type": "application/zip",
+            "size": 6889628,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          },
+          {
+            "id": 373934403,
+            "name": "ResetPing_0.1.3_x64_en-US.msi.zip.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:47:26Z"
+          }
+        ]
+      },
+      {
+        "id": 297061135,
+        "tag_name": "v0.1.2",
+        "name": "ResetPing v0.1.2",
+        "draft": false,
+        "prerelease": false,
+        "published_at": "2026-03-14T20:34:03Z",
+        "assets": [
+          {
+            "id": 373929086,
+            "name": "latest.json",
+            "content_type": "application/json",
+            "size": 683,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:02Z"
+          },
+          {
+            "id": 373929045,
+            "name": "ResetPing.app.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 7869398,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:00Z"
+          },
+          {
+            "id": 373929053,
+            "name": "ResetPing.app.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 408,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:00Z"
+          },
+          {
+            "id": 373929023,
+            "name": "ResetPing_0.1.2_aarch64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 81787400,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:03Z"
+          },
+          {
+            "id": 373929027,
+            "name": "ResetPing_0.1.2_aarch64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:33:58Z"
+          },
+          {
+            "id": 373929028,
+            "name": "ResetPing_0.1.2_aarch64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 81129187,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:02Z"
+          },
+          {
+            "id": 373929026,
+            "name": "ResetPing_0.1.2_aarch64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:33:58Z"
+          },
+          {
+            "id": 373929040,
+            "name": "ResetPing_0.1.2_aarch64.dmg",
+            "content_type": "application/x-apple-diskimage",
+            "size": 7709035,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:33:59Z"
+          },
+          {
+            "id": 373929025,
+            "name": "ResetPing_0.1.2_amd64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 83896824,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:02Z"
+          },
+          {
+            "id": 373929030,
+            "name": "ResetPing_0.1.2_amd64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:33:58Z"
+          },
+          {
+            "id": 373929031,
+            "name": "ResetPing_0.1.2_amd64.AppImage.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 83255841,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:01Z"
+          },
+          {
+            "id": 373929037,
+            "name": "ResetPing_0.1.2_amd64.AppImage.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 432,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:33:58Z"
+          },
+          {
+            "id": 373929076,
+            "name": "ResetPing_0.1.2_x64-setup.exe",
+            "content_type": "application/x-msdownload",
+            "size": 4581538,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:02Z"
+          },
+          {
+            "id": 373929080,
+            "name": "ResetPing_0.1.2_x64-setup.exe.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:02Z"
+          },
+          {
+            "id": 373929056,
+            "name": "ResetPing_0.1.2_x64_en-US.msi",
+            "content_type": "application/x-msi",
+            "size": 6893568,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:01Z"
+          },
+          {
+            "id": 373929068,
+            "name": "ResetPing_0.1.2_x64_en-US.msi.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:01Z"
+          },
+          {
+            "id": 373929070,
+            "name": "ResetPing_0.1.2_x64_en-US.msi.zip",
+            "content_type": "application/zip",
+            "size": 6893724,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:01Z"
+          },
+          {
+            "id": 373929073,
+            "name": "ResetPing_0.1.2_x64_en-US.msi.zip.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:34:01Z"
+          }
+        ]
+      },
+      {
+        "id": 297057389,
+        "tag_name": "v0.1.1",
+        "name": "ResetPing v0.1.1",
+        "draft": false,
+        "prerelease": false,
+        "published_at": "2026-03-14T20:02:26Z",
+        "assets": [
+          {
+            "id": 373915142,
+            "name": "ResetPing.app.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 7867943,
+            "download_count": 1,
+            "updated_at": "2026-03-14T20:02:24Z"
+          },
+          {
+            "id": 373915143,
+            "name": "ResetPing.app.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 408,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:02:24Z"
+          },
+          {
+            "id": 373915138,
+            "name": "ResetPing_0.1.1_aarch64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 81803784,
+            "download_count": 1,
+            "updated_at": "2026-03-14T20:02:26Z"
+          },
+          {
+            "id": 373915140,
+            "name": "ResetPing_0.1.1_aarch64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:02:23Z"
+          },
+          {
+            "id": 373915139,
+            "name": "ResetPing_0.1.1_aarch64.dmg",
+            "content_type": "application/x-apple-diskimage",
+            "size": 7709816,
+            "download_count": 2,
+            "updated_at": "2026-03-14T20:02:24Z"
+          },
+          {
+            "id": 373915137,
+            "name": "ResetPing_0.1.1_amd64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 83900920,
+            "download_count": 1,
+            "updated_at": "2026-03-14T20:02:26Z"
+          },
+          {
+            "id": 373915141,
+            "name": "ResetPing_0.1.1_amd64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:02:23Z"
+          },
+          {
+            "id": 373915147,
+            "name": "ResetPing_0.1.1_x64-setup.exe",
+            "content_type": "application/x-msdownload",
+            "size": 4590516,
+            "download_count": 1,
+            "updated_at": "2026-03-14T20:02:25Z"
+          },
+          {
+            "id": 373915148,
+            "name": "ResetPing_0.1.1_x64-setup.exe.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:02:24Z"
+          },
+          {
+            "id": 373915145,
+            "name": "ResetPing_0.1.1_x64_en-US.msi",
+            "content_type": "application/x-msi",
+            "size": 6893568,
+            "download_count": 1,
+            "updated_at": "2026-03-14T20:02:24Z"
+          },
+          {
+            "id": 373915146,
+            "name": "ResetPing_0.1.1_x64_en-US.msi.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T20:02:24Z"
+          }
+        ]
+      },
+      {
+        "id": 297002682,
+        "tag_name": "v0.1.0",
+        "name": "ResetPing v0.1.0",
+        "draft": false,
+        "prerelease": false,
+        "published_at": "2026-03-14T13:20:12Z",
+        "assets": [
+          {
+            "id": 373752533,
+            "name": "ResetPing.app.tar.gz",
+            "content_type": "application/x-gtar",
+            "size": 7865748,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:09Z"
+          },
+          {
+            "id": 373752535,
+            "name": "ResetPing.app.tar.gz.sig",
+            "content_type": "application/pgp-signature",
+            "size": 408,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:09Z"
+          },
+          {
+            "id": 373752527,
+            "name": "ResetPing_0.1.0_aarch64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 81820168,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:12Z"
+          },
+          {
+            "id": 373752528,
+            "name": "ResetPing_0.1.0_aarch64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 424,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:08Z"
+          },
+          {
+            "id": 373752525,
+            "name": "ResetPing_0.1.0_aarch64.dmg",
+            "content_type": "application/x-apple-diskimage",
+            "size": 7701230,
+            "download_count": 1,
+            "updated_at": "2026-03-14T13:20:09Z"
+          },
+          {
+            "id": 373752529,
+            "name": "ResetPing_0.1.0_amd64.AppImage",
+            "content_type": "application/vnd.appimage",
+            "size": 83892728,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:12Z"
+          },
+          {
+            "id": 373752526,
+            "name": "ResetPing_0.1.0_amd64.AppImage.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:08Z"
+          },
+          {
+            "id": 373752538,
+            "name": "ResetPing_0.1.0_x64-setup.exe",
+            "content_type": "application/x-msdownload",
+            "size": 4588265,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:10Z"
+          },
+          {
+            "id": 373752540,
+            "name": "ResetPing_0.1.0_x64-setup.exe.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:10Z"
+          },
+          {
+            "id": 373752536,
+            "name": "ResetPing_0.1.0_x64_en-US.msi",
+            "content_type": "application/x-msi",
+            "size": 6889472,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:09Z"
+          },
+          {
+            "id": 373752537,
+            "name": "ResetPing_0.1.0_x64_en-US.msi.sig",
+            "content_type": "application/pgp-signature",
+            "size": 420,
+            "download_count": 0,
+            "updated_at": "2026-03-14T13:20:09Z"
+          }
+        ]
+      }
+    ]
   }
 ]
